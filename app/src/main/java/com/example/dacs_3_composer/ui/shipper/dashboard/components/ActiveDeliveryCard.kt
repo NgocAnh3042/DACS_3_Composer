@@ -51,7 +51,7 @@ fun ActiveDeliveryDetailCard(
                 order = order,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(500.dp) // Chiều cao vừa vặn cho UI của thẻ
+                    .height(320.dp) // Chiều cao vừa vặn cho UI của thẻ
             )
             Spacer(modifier = Modifier.height(16.dp))
 

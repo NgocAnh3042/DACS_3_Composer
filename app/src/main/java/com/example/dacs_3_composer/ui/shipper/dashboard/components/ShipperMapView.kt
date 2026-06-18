@@ -7,12 +7,14 @@ import android.content.ContextWrapper
 import android.view.MotionEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -99,24 +101,26 @@ private fun findClosestPointOnRoute(rawPoint: GeoPoint, routePoints: List<GeoPoi
     }
     return closestPoint
 }
-
 @OptIn(ExperimentalPermissionsApi::class)
 @SuppressLint("MissingPermission", "ClickableViewAccessibility")
 @Composable
 fun ShipperMapView(
-    order: Order,
-    modifier: Modifier = Modifier.fillMaxWidth().height(320.dp),
+    order: Order?, // 🌟 ĐỔI THÀNH NULLABLE: Để linh hoạt khi chưa có đơn
+    modifier: Modifier = Modifier.fillMaxWidth().height(20.dp), // 🌟 ĐÃ GIẢM CHIỀU CAO: Từ 320.dp xuống 220.dp để vừa vặn hơn
     shipperViewModel: ShipperViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val locationPermissionState = rememberPermissionState(android.Manifest.permission.ACCESS_FINE_LOCATION)
 
+    // Kiểm tra trạng thái đơn hàng có hợp lệ để điều hướng hay không
+    val isOrderValid = order != null && order.id.isNotBlank() && order.id != "HEATING_MAP_PREVIEW"
+
     val gpsSettingLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            if (order.id.isNotBlank() && order.id != "HEATING_MAP_PREVIEW") {
-                shipperViewModel.startLocationUpdates(context, order.id)
+            if (isOrderValid) {
+                shipperViewModel.startLocationUpdates(context, order!!.id)
             }
         }
     }
@@ -133,8 +137,8 @@ fun ShipperMapView(
         val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
         val client = LocationServices.getSettingsClient(context)
         client.checkLocationSettings(builder.build()).addOnSuccessListener {
-            if (order.id.isNotBlank() && order.id != "HEATING_MAP_PREVIEW") {
-                shipperViewModel.startLocationUpdates(context, order.id)
+            if (isOrderValid) {
+                shipperViewModel.startLocationUpdates(context, order!!.id)
             }
         }.addOnFailureListener { exception ->
             if (exception is ResolvableApiException) {
@@ -145,7 +149,7 @@ fun ShipperMapView(
         }
     }
 
-    LaunchedEffect(locationPermissionState.status.isGranted, order.id) {
+    LaunchedEffect(locationPermissionState.status.isGranted, order?.id) {
         if (locationPermissionState.status.isGranted) {
             shipperViewModel.fetchCurrentLocationOnce(context)
             checkAndRequestGPS()
@@ -157,23 +161,23 @@ fun ShipperMapView(
         val realRoutePoints by shipperViewModel.routePoints.collectAsState()
         var firebaseRawShipperPoint by remember { mutableStateOf<GeoPoint?>(null) }
 
-        val trackingRef = remember(order.id) {
-            Firebase.database.getReference("tracking").child(order.id)
+        val trackingRef = remember(order?.id) {
+            if (isOrderValid) Firebase.database.getReference("tracking").child(order!!.id) else null
         }
 
-        DisposableEffect(order.id) {
+        DisposableEffect(order?.id) {
             onDispose { shipperViewModel.stopLocationUpdates() }
         }
 
-        DisposableEffect(order.id) {
+        DisposableEffect(order?.id) {
             var listener: ValueEventListener? = null
-            if (order.id.isNotBlank() && order.id != "HEATING_MAP_PREVIEW") {
+            if (isOrderValid && trackingRef != null) {
                 listener = object : ValueEventListener {
                     override fun onDataChange(snapshot: DataSnapshot) {
                         try {
                             val lat = (snapshot.child("lat").value as? Number)?.toDouble() ?: return
                             val lng = (snapshot.child("lng").value as? Number)?.toDouble() ?: return
-                            firebaseRawShipperPoint = GeoPoint(lat, lng) // raw GPS location from Firebase
+                            firebaseRawShipperPoint = GeoPoint(lat, lng)
                         } catch (e: Exception) { e.printStackTrace() }
                     }
                     override fun onCancelled(error: DatabaseError) {}
@@ -181,18 +185,23 @@ fun ShipperMapView(
                 trackingRef.addValueEventListener(listener)
             }
             onDispose {
-                listener?.let { trackingRef.removeEventListener(it) }
+                listener?.let { trackingRef?.removeEventListener(it) }
                 shipperViewModel.clearRoute()
             }
         }
 
-        LaunchedEffect(firebaseRawShipperPoint, deviceLocation, order.id, order.status) {
+        // 🌟 LOGIC ĐƯỜNG ĐI: Chỉ gọi OSRM API khi thực sự có đơn hàng đang chạy
+        LaunchedEffect(firebaseRawShipperPoint, deviceLocation, order?.id, order?.status) {
+            if (!isOrderValid || order == null) {
+                shipperViewModel.clearRoute()
+                return@LaunchedEffect
+            }
+
             val isGoingToRestaurant = order.status == "ACCEPTED"
             val destLat = if (isGoingToRestaurant) order.restaurantLat else order.customerLat
             val destLng = if (isGoingToRestaurant) order.restaurantLng else order.customerLng
             if (destLat == null || destLng == null) return@LaunchedEffect
 
-            // Get Raw location to calculate route, no snap needed here
             val startLat = firebaseRawShipperPoint?.latitude ?: deviceLocation?.get("lat")
             val startLng = firebaseRawShipperPoint?.longitude ?: deviceLocation?.get("lng")
             if (startLat == null || startLng == null) return@LaunchedEffect
@@ -200,17 +209,45 @@ fun ShipperMapView(
         }
 
         AndroidView(
-            modifier = modifier,
+            modifier = modifier
+                // 🌟 SỬA LẠI: Dùng pointerInput để ép chặn cha, nhưng giải phóng ngay để view con xử lý
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // Khi phát hiện ngón tay chạm xuống hoặc di chuyển, chặn ngay LazyColumn
+                            if (event.changes.any { it.pressed }) {
+                                // Kỹ thuật can thiệp pointer của Compose
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                },
             factory = { ctx ->
                 val actualCtx = ctx.findActivity() ?: ctx
                 MapView(actualCtx).apply {
                     try {
                         setMultiTouchControls(true)
                         setBuiltInZoomControls(false)
-                        controller.setZoom(17.5) // Higher zoom to see marker stick to road clearly
+                        controller.setZoom(17.5)
 
+                        // 🌟 GIỮ NGUYÊN VÀ CỦNG CỐ CƠ CHẾ NÀY (QUAN TRỌNG NHẤT VỚI MAP TRONG LAZYCOLUMN)
                         setOnTouchListener { view, event ->
-                            if (event.action == MotionEvent.ACTION_DOWN) view.parent.requestDisallowInterceptTouchEvent(true)
+                            when (event.action) {
+                                MotionEvent.ACTION_DOWN -> {
+                                    // Ép LazyColumn buông tay ngay lập tức khi chạm vào Map
+                                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                                }
+                                MotionEvent.ACTION_MOVE -> {
+                                    // Tiếp tục giữ quyền kiểm soát hành động cuộn
+                                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                                }
+                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                    // Trả lại quyền cho LazyColumn khi nhấc tay
+                                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                                }
+                            }
+                            // TRẢ VỀ FALSE: Để bản đồ truyền sự kiện xuống lớp xử lý drag/zoom mặc định của Osmdroid
                             false
                         }
 
@@ -231,43 +268,50 @@ fun ShipperMapView(
                     val destinationMarker = mapView.overlays.firstOrNull { (it as? Marker)?.id == "destination" } as? Marker
                     val shipperMarker = mapView.overlays.firstOrNull { (it as? Marker)?.id == "shipper" } as? Marker
                     val routePolyline = mapView.overlays.firstOrNull { (it as? Polyline)?.id == "route" } as? Polyline
-                    val isGoingToRestaurant = order.status == "ACCEPTED"
-                    val destLat = if (isGoingToRestaurant) order.restaurantLat else order.customerLat
-                    val destLng = if (isGoingToRestaurant) order.restaurantLng else order.customerLng
-                    val destinationPoint = GeoPoint(destLat ?: 15.9733, destLng ?: 108.2517)
 
-                    destinationMarker?.apply {
-                        position = destinationPoint
-                        title = if (isGoingToRestaurant) "Nhà hàng: ${order.restaurantName}" else "Khách hàng"
-                    }
+                    // Xác định vị trí thô của Shipper
+                    val rawShipperPoint = firebaseRawShipperPoint ?: GeoPoint(
+                        deviceLocation?.get("lat") ?: 15.9733,
+                        deviceLocation?.get("lng") ?: 108.2517
+                    )
 
+                    // 🌟 PHÂN TÁCH LOGIC: Có đơn hàng vs Chưa có đơn hàng
+                    if (isOrderValid && order != null) {
+                        // 1. CÓ ĐƠN HÀNG -> Hiển thị lộ trình và điểm đến
+                        val isGoingToRestaurant = order.status == "ACCEPTED"
+                        val destLat = if (isGoingToRestaurant) order.restaurantLat else order.customerLat
+                        val destLng = if (isGoingToRestaurant) order.restaurantLng else order.customerLng
+                        val destinationPoint = GeoPoint(destLat ?: 15.9733, destLng ?: 108.2517)
 
-                    val rawShipperPoint = if (order.id != "HEATING_MAP_PREVIEW" && order.id.isNotBlank()) {
-                        firebaseRawShipperPoint ?: GeoPoint(deviceLocation?.get("lat") ?: 15.9733, deviceLocation?.get("lng") ?: 108.2517)
+                        destinationMarker?.apply {
+                            setVisible(true)
+                            position = destinationPoint
+                            title = if (isGoingToRestaurant) "Nhà hàng: ${order.restaurantName}" else "Khách hàng"
+                        }
+
+                        // Áp dụng Snap-to-road nếu có dữ liệu đường đi
+                        val shipperPointOnRoad = if (realRoutePoints.size >= 2) {
+                            findClosestPointOnRoute(rawShipperPoint, realRoutePoints)
+                        } else {
+                            rawShipperPoint
+                        }
+
+                        shipperMarker?.position = shipperPointOnRoad
+
+                        if (realRoutePoints.isNotEmpty()) {
+                            routePolyline?.apply { setVisible(true); setPoints(realRoutePoints) }
+                        } else {
+                            routePolyline?.apply { setVisible(true); setPoints(listOf(rawShipperPoint, destinationPoint)) }
+                        }
+
+                        mapView.controller.animateTo(shipperPointOnRoad)
                     } else {
-                        GeoPoint(deviceLocation?.get("lat") ?: 15.9733, deviceLocation?.get("lng") ?: 108.2517)
-                    }
+                        // 2. CHƯA CÓ ĐƠN HÀNG -> Ẩn các ký hiệu điều hướng, chỉ định vị chính mình
+                        destinationMarker?.setVisible(false)
+                        routePolyline?.setVisible(false)
 
-                    val shipperPointOnRoad = if (realRoutePoints.size >= 2) {
-                        android.util.Log.d("SNAP", "Applying snap-to-road, route size: ${realRoutePoints.size}")
-                        findClosestPointOnRoute(rawShipperPoint, realRoutePoints)
-                    } else {
-                        android.util.Log.d("SNAP", "No route, raw GPS used")
-                        rawShipperPoint
-                    }
-
-                    shipperMarker?.position = shipperPointOnRoad
-
-                    if (realRoutePoints.isNotEmpty()) {
-                        routePolyline?.setPoints(realRoutePoints)
-                    } else {
-                        routePolyline?.setPoints(listOf(rawShipperPoint, destinationPoint))
-                    }
-
-                    if (order.id != "HEATING_MAP_PREVIEW") {
-                        mapView.controller.animateTo(shipperPointOnRoad) // Center camera on road-snapped point
-                    } else {
-                        mapView.controller.setCenter(rawShipperPoint)
+                        shipperMarker?.position = rawShipperPoint
+                        mapView.controller.animateTo(rawShipperPoint)
                     }
 
                     mapView.invalidate()
