@@ -19,7 +19,6 @@ import com.example.dacs_3_composer.ui.admin.analytics.AdminAnalyticsScreen
 import com.example.dacs_3_composer.ui.admin.complaint.AdminComplaintScreen
 import com.example.dacs_3_composer.ui.admin.customer.AdminCustomerScreen
 import com.example.dacs_3_composer.ui.admin.profile.AdminProfileScreen
-import com.example.dacs_3_composer.ui.admin.payments.AdminPaymentScreen
 import com.example.dacs_3_composer.ui.admin.settings.AdminPromotionScreen
 import com.example.dacs_3_composer.ui.admin.settings.AdminPromotionViewModel
 
@@ -33,8 +32,7 @@ fun MainRouteContainerAdmin(
     // Danh sách các mục hiển thị dưới thanh BottomBar điều hướng của Super Admin
     val navigationItems = listOf(
         NavigationAdmin.Overview,
-        NavigationAdmin.Orders,
-        NavigationAdmin.Payments,
+//        NavigationAdmin.Orders,
         NavigationAdmin.Customers,
         NavigationAdmin.Promotions,
         NavigationAdmin.Profile
@@ -102,18 +100,10 @@ fun MainRouteContainerAdmin(
                 AdminAnalyticsScreen()
             }
 
-            composable(NavigationAdmin.Orders.route) {
-                AdminComplaintScreen()
-            }
-            
-            // ✅ Tab 3: Quản lý Giao dịch PayOS
-            composable(NavigationAdmin.Payments.route) {
-                AdminPaymentScreen()
-            }
-
-//            composable(NavigationAdmin.Categories.route) {
-//                AdminCategoryScreen()
+//            composable(NavigationAdmin.Orders.route) {
+//                AdminComplaintScreen()
 //            }
+
 
             composable(NavigationAdmin.Customers.route) {
                 AdminCustomerScreen()
