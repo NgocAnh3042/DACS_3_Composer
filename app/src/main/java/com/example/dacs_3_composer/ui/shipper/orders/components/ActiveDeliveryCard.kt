@@ -1,5 +1,6 @@
 package com.example.dacs_3_composer.ui.shipper.orders.components
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.example.dacs_3_composer.data.model.Order
 import java.util.Locale
 
+@SuppressLint("NonObservableLocale")
 @Composable
 fun ActiveDeliveryCard(
     order: Order,

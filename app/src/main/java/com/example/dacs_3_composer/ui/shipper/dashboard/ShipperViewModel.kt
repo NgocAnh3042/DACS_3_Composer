@@ -64,7 +64,6 @@ class ShipperViewModel : ViewModel() {
     private val _routePoints = MutableStateFlow<List<GeoPoint>>(emptyList())
     val routePoints: StateFlow<List<GeoPoint>> = _routePoints.asStateFlow()
 
-    // ✅ FIX: OkHttpClient dùng chung với timeout
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
@@ -109,6 +108,8 @@ class ShipperViewModel : ViewModel() {
 
     init {
         observeShipperStatus()
+        // 🌟 FIX 1: Tự động kích hoạt lắng nghe Đơn hàng đang giao và Lịch sử ngay khi khởi tạo ViewModel
+        startAllListeners()
     }
 
     fun startAllListeners() {
@@ -119,7 +120,6 @@ class ShipperViewModel : ViewModel() {
         }
     }
 
-    // ✅ FIX CHÍNH: Thêm log, timeout, server backup
     fun fetchOSRMRoute(startLat: Double, startLng: Double, endLat: Double, endLng: Double) {
         viewModelScope.launch(Dispatchers.IO) {
             val serverUrls = listOf(
@@ -128,72 +128,32 @@ class ShipperViewModel : ViewModel() {
             )
 
             Log.d("OSRM", "=== fetchOSRMRoute called ===")
-            Log.d("OSRM", "Start: lat=$startLat, lng=$startLng")
-            Log.d("OSRM", "End:   lat=$endLat, lng=$endLng")
-
             var success = false
 
             for ((index, url) in serverUrls.withIndex()) {
                 if (success) break
-                Log.d("OSRM", "Trying server ${index + 1}: $url")
-
                 try {
                     val request = Request.Builder().url(url).build()
-
                     httpClient.newCall(request).execute().use { response ->
-                        Log.d("OSRM", "Server ${index + 1} response code: ${response.code}")
-
-                        if (!response.isSuccessful) {
-                            Log.w("OSRM", "Server ${index + 1} returned unsuccessful: ${response.code}")
-                            return@use
-                        }
-
-                        val responseData = response.body?.string()
-                        if (responseData.isNullOrBlank()) {
-                            Log.w("OSRM", "Server ${index + 1} returned empty body")
-                            return@use
-                        }
-
-                        Log.d("OSRM", "Response body length: ${responseData.length} chars")
-
+                        if (!response.isSuccessful) return@use
+                        val responseData = response.body?.string() ?: return@use
                         val jsonObject = JSONObject(responseData)
-                        val code = jsonObject.optString("code", "")
-                        Log.d("OSRM", "OSRM code: $code")
-
-                        if (code != "Ok") {
-                            Log.w("OSRM", "OSRM returned non-Ok code: $code")
-                            return@use
-                        }
+                        if (jsonObject.optString("code", "") != "Ok") return@use
 
                         val routes = jsonObject.getJSONArray("routes")
-                        Log.d("OSRM", "Number of routes: ${routes.length()}")
-
-                        if (routes.length() == 0) {
-                            Log.w("OSRM", "No routes found")
-                            return@use
-                        }
+                        if (routes.length() == 0) return@use
 
                         val geometry = routes.getJSONObject(0).getString("geometry")
-                        Log.d("OSRM", "Geometry string length: ${geometry.length}")
-
                         val decodedPoints = decodePolylineToGeoPoints(geometry)
-                        Log.d("OSRM", "Decoded ${decodedPoints.size} GeoPoints")
 
                         if (decodedPoints.isNotEmpty()) {
                             _routePoints.value = decodedPoints
                             success = true
-                            Log.d("OSRM", "✅ Route set successfully with ${decodedPoints.size} points")
-                        } else {
-                            Log.w("OSRM", "Decoded points list is empty")
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("OSRM", "Server ${index + 1} exception: ${e.javaClass.simpleName}: ${e.message}")
+                    Log.e("OSRM", "Server ${index + 1} exception: ${e.message}")
                 }
-            }
-
-            if (!success) {
-                Log.e("OSRM", "❌ All servers failed. Route will show as straight line.")
             }
         }
     }
@@ -283,6 +243,7 @@ class ShipperViewModel : ViewModel() {
     private fun startListeningAvailableOrders() {
         if (availableOrdersListener != null) return
 
+        // 🌟 LƯU Ý: Sàn đơn tự do lấy các đơn có trạng thái ACCEPTED nhưng CHƯA có ai giao (shipperId rỗng)
         availableOrdersListener = firestore.collection("orders")
             .whereEqualTo("status", OrderStatus.ACCEPTED.name)
             .addSnapshotListener { snapshot, error ->
@@ -333,7 +294,12 @@ class ShipperViewModel : ViewModel() {
                                 customerLng = (doc.get("customerLng") as? Number)?.toDouble()
                             }
                         } catch (e: Exception) { null }
-                    }.firstOrNull { it.status == "ACCEPTED" || it.status == "SHIPPING" }
+                    }.firstOrNull {
+                        // 🌟 FIX 2: Đồng bộ chuẩn hóa chữ hoa/thường hoặc tên Enum trạng thái đang xử lý
+                        it.status.equals("ACCEPTED", ignoreCase = true) ||
+                                it.status.equals("SHIPPING", ignoreCase = true) ||
+                                it.status.equals("DELIVERING", ignoreCase = true)
+                    }
 
                     _activeDeliveryOrder.value = activeOrder
                 }
@@ -344,9 +310,10 @@ class ShipperViewModel : ViewModel() {
         val uid = currentShipperId.ifBlank { return }
         if (historyOrdersListener != null) return
 
+        // 🌟 FIX 3: Loại bỏ điều kiện .whereEqualTo("status") ở tầng Query Firestore
+        // để có thể kéo về cả đơn hoàn thành (COMPLETED) lẫn đơn bị huỷ (CANCELLED) theo logic UI của bạn.
         historyOrdersListener = firestore.collection("orders")
             .whereEqualTo("shipperId", uid)
-            .whereEqualTo("status", OrderStatus.COMPLETED.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) return@addSnapshotListener
                 if (snapshot != null) {
@@ -354,6 +321,10 @@ class ShipperViewModel : ViewModel() {
                         try {
                             doc.toObject(Order::class.java)?.apply { id = doc.id }
                         } catch (e: Exception) { null }
+                    }.filter {
+                        // Thực hiện lọc ở Client-side để gom cả 2 trạng thái kết thúc chuyến đi
+                        it.status.equals(OrderStatus.COMPLETED.name, ignoreCase = true) ||
+                                it.status.equals("CANCELLED", ignoreCase = true)
                     }
                     _historyOrders.value = list
                 }
@@ -366,8 +337,14 @@ class ShipperViewModel : ViewModel() {
             try {
                 isLoading = true
                 firestore.collection("orders").document(orderId)
-                    .update(mapOf("shipperId" to uid, "status" to OrderStatus.ACCEPTED.name))
-                    .addOnSuccessListener { isLoading = false }
+                    .update(mapOf(
+                        "shipperId" to uid,
+                        "status" to OrderStatus.ACCEPTED.name // Hoặc gán trực tiếp chuỗi "ACCEPTED" tùy thuộc DB
+                    ))
+                    .addOnSuccessListener {
+                        isLoading = false
+                        Log.d("FIRESTORE_SUCCESS", "Nhận đơn thành công, tiến trình cập nhật Realtime tự động kích hoạt.")
+                    }
                     .addOnFailureListener { isLoading = false }
             } catch (e: Exception) { isLoading = false }
         }
@@ -399,42 +376,6 @@ class ShipperViewModel : ViewModel() {
                 if (currentTrackingOrderId != null && currentTrackingOrderId != "HEATING_MAP_PREVIEW") {
                     try {
                         realtimeDb.child(orderId).setValue(coordinates)
-                            .addOnSuccessListener {
-                                Log.d("GPS_TRACKING", "🚀 Tọa độ cập nhật thành công: $coordinates")
-                            }
-                    } catch (e: Exception) { e.printStackTrace() }
-                }
-            }
-        }
-
-        try {
-            fusedLocationClient?.requestLocationUpdates(
-                locationRequest,
-                locationCallback!!,
-                Looper.getMainLooper()
-            )
-            Log.d("GPS_TRACKING", "⚡ Bắt đầu nhận tín hiệu luồng GPS liên tục.")
-        } catch (e: Exception) { e.printStackTrace() }
-    }
-
-    // Hàm phụ để kích hoạt lắng nghe tọa độ (được tách ra từ logic trên)
-    @SuppressLint("MissingPermission")
-    private fun requestLocationExecution(locationRequest: LocationRequest, orderId: String) {
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                val lastLocation = locationResult.lastLocation ?: return
-                val coordinates = mapOf(
-                    "lat" to lastLocation.latitude,
-                    "lng" to lastLocation.longitude
-                )
-                _currentShipperLocation.value = coordinates
-
-                if (currentTrackingOrderId != null && currentTrackingOrderId != "HEATING_MAP_PREVIEW") {
-                    try {
-                        realtimeDb.child(orderId).setValue(coordinates)
-                            .addOnSuccessListener {
-                                Log.d("GPS_TRACKING", "🚀 Tọa độ cập nhật thành công: $coordinates")
-                            }
                     } catch (e: Exception) { e.printStackTrace() }
                 }
             }
