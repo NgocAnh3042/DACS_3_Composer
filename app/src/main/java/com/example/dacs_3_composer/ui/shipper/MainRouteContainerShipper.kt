@@ -29,6 +29,8 @@ import com.example.dacs_3_composer.ui.shipper.profile.ShipperEditProfileScreen
 import com.example.dacs_3_composer.ui.shipper.profile.ShipperProfileViewModel
 import com.example.dacs_3_composer.ui.chat.MessageCenterScreen
 import com.example.dacs_3_composer.ui.chat.ChatDetailScreen
+import com.example.dacs_3_composer.data.repository.ChatRepository
+import kotlinx.coroutines.launch
 
 @Composable
 fun MainRouteContainerShipper(
@@ -36,8 +38,9 @@ fun MainRouteContainerShipper(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
+    val chatRepository = remember { ChatRepository() }
 
-    // Khởi tạo ViewModel dùng chung
     val shipperViewModel: ShipperViewModel = viewModel()
     val profileViewModel: ShipperProfileViewModel = viewModel()
 
@@ -50,7 +53,6 @@ fun MainRouteContainerShipper(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // 🎯 CẬP NHẬT: Ẩn BottomBar khi ở màn hình chi tiết đơn hàng, hồ sơ hoặc nhắn tin
     val shouldShowBottomBar = currentRoute?.startsWith("shipper_order_detail") != true
             && currentRoute != "shipper_edit_profile"
             && currentRoute != "message_center"
@@ -67,15 +69,12 @@ fun MainRouteContainerShipper(
                 ) {
                     navigationItems.forEach { item ->
                         val isSelected = currentRoute == item.route
-
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = {
                                 if (currentRoute != item.route) {
                                     navController.navigate(item.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
@@ -83,16 +82,10 @@ fun MainRouteContainerShipper(
                             },
                             icon = {
                                 item.icon?.let {
-                                    Icon(
-                                        imageVector = it,
-                                        contentDescription = item.title,
-                                        modifier = Modifier.size(24.dp)
-                                    )
+                                    Icon(imageVector = it, contentDescription = item.title, modifier = Modifier.size(24.dp))
                                 }
                             },
-                            label = {
-                                Text(text = item.title, style = MaterialTheme.typography.labelSmall)
-                            },
+                            label = { Text(text = item.title, style = MaterialTheme.typography.labelSmall) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Color.White,
                                 selectedTextColor = Color(0xFF1A56DB),
@@ -111,53 +104,45 @@ fun MainRouteContainerShipper(
             startDestination = NavigationShipper.Dashboard.route,
             modifier = Modifier.padding(paddingValues)
         ) {
-            // Màn hình 1: Tổng quan
             composable(NavigationShipper.Dashboard.route) {
                 ShipperDashboardScreen(
-                    onOrderClick = { id ->
-                        navController.navigate("shipper_order_detail/$id")
-                    },
-//                    onMessageClick = {
-//                        navController.navigate("message_center")
-//                    }
+                    onOrderClick = { id -> navController.navigate("shipper_order_detail/$id") },
+                    onNavigateToChat = { navController.navigate("message_center") }
                 )
             }
 
-            // Màn hình 2: Đơn hàng của tôi
             composable(NavigationShipper.Orders.route) {
                 ShipperOrdersScreen(
                     viewModel = shipperViewModel,
-                    onNavigateToDetail = { id ->
-                        navController.navigate("shipper_order_detail/$id")
-                    }
+                    onNavigateToDetail = { id -> navController.navigate("shipper_order_detail/$id") }
                 )
             }
 
-            // Màn hình 3: Thông tin cá nhân Shipper
             composable(NavigationShipper.Account.route) {
-                LaunchedEffect(Unit) {
-                    profileViewModel.loadProfile()
-                }
-
+                LaunchedEffect(Unit) { profileViewModel.loadProfile() }
                 ShipperProfileScreen(
                     viewModel = profileViewModel,
-                    onLogoutClick = {
-                        onLogout()
-                    },
+                    onLogoutClick = { onLogout() },
                     onNavigateToSection = { sectionKey ->
-                        if (sectionKey == "EDIT_PROFILE") {
-                            navController.navigate("shipper_edit_profile")
+                        when (sectionKey) {
+                            "EDIT_PROFILE" -> navController.navigate("shipper_edit_profile")
+                            "SUPPORT" -> {
+                                // 🎯 ĐIỀU HƯỚNG CHAT VỚI ADMIN
+                                coroutineScope.launch {
+                                    try {
+                                        val conversationId = chatRepository.contactSupport("shipper")
+                                        navController.navigate("chat_detail/$conversationId")
+                                    } catch (e: Exception) { }
+                                }
+                            }
                         }
                     }
                 )
             }
 
-            // Màn hình Nhắn tin
             composable("message_center") {
                 MessageCenterScreen(
-                    onConversationClick = { convId -> 
-                        navController.navigate("chat_detail/$convId") 
-                    },
+                    onConversationClick = { convId -> navController.navigate("chat_detail/$convId") },
                     onBackClick = { navController.popBackStack() }
                 )
             }
@@ -167,19 +152,11 @@ fun MainRouteContainerShipper(
                 arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val convId = backStackEntry.arguments?.getString("conversationId") ?: ""
-                ChatDetailScreen(
-                    conversationId = convId,
-                    onBackClick = { navController.popBackStack() }
-                )
+                ChatDetailScreen(conversationId = convId, onBackClick = { navController.popBackStack() })
             }
 
             composable("shipper_edit_profile") {
-                ShipperEditProfileScreen(
-                    viewModel = profileViewModel,
-                    onBackClick = {
-                        navController.popBackStack()
-                    }
-                )
+                ShipperEditProfileScreen(viewModel = profileViewModel, onBackClick = { navController.popBackStack() })
             }
 
             composable(
@@ -187,10 +164,10 @@ fun MainRouteContainerShipper(
                 arguments = listOf(navArgument("orderId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
-
                 ShipperOrderDetailScreen(
-                    orderId = orderId,
-                    onBackClick = { navController.popBackStack() }
+                    orderId = orderId, 
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToChat = { convId -> navController.navigate("chat_detail/$convId") }
                 )
             }
         }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -20,11 +21,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.dacs_3_composer.data.model.Order
 import com.example.dacs_3_composer.data.model.OrderStatus
+import com.example.dacs_3_composer.data.model.Conversation
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 
 @SuppressLint("NonObservableLocale")
@@ -35,9 +36,9 @@ fun OrderDetailScreen(
     orderViewModel: OrderViewModel,
     onBackClick: () -> Unit,
     onNavigateToPayment: (String, String) -> Unit,
+    onNavigateToChat: (String) -> Unit = {}, // 🎯 THÊM: Điều hướng đến Chat
     modifier: Modifier = Modifier
 ) {
-    // Kích hoạt lắng nghe dữ liệu thời gian thực của đơn hàng này từ Firebase
     LaunchedEffect(orderId) {
         orderViewModel.observeOrderDetails(orderId)
     }
@@ -88,7 +89,6 @@ fun OrderDetailScreen(
         ) {
             val order = orderState
             if (order == null) {
-                // Hiển thị trạng thái đang tải nếu chưa nhận được dữ liệu từ Firebase
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color(0xFF2159BC))
                 }
@@ -98,7 +98,6 @@ fun OrderDetailScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // 1. Khối Trạng thái đơn hàng & Thời gian đặt
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -114,16 +113,15 @@ fun OrderDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // Lấy tên hiển thị tiếng Việt của trạng thái
                                 val statusEnum = try { OrderStatus.valueOf(order.status) } catch (e: Exception) { null }
                                 val statusText = statusEnum?.displayName ?: order.status
                                 val statusColor = when (order.status) {
-                                    "PENDING" -> Color(0xFFFF9800)     // Cam: Chờ xác nhận
-                                    "PROCESSING" -> Color(0xFF00B0FF)  // Xanh dương nhạt: Đang nấu
-                                    "ACCEPTED" -> Color(0xFF9C27B0)    // Tím: Chờ shipper
-                                    "SHIPPING" -> Color(0xFF2159BC)    // Xanh dương: Đang giao
-                                    "COMPLETED" -> Color(0xFF4CAF50)   // Xanh lá: Hoàn thành
-                                    "CANCELLED" -> Color(0xFFDC3545)   // Đỏ: Đã hủy
+                                    "PENDING" -> Color(0xFFFF9800)
+                                    "PROCESSING" -> Color(0xFF00B0FF)
+                                    "ACCEPTED" -> Color(0xFF9C27B0)
+                                    "SHIPPING" -> Color(0xFF2159BC)
+                                    "COMPLETED" -> Color(0xFF4CAF50)
+                                    "CANCELLED" -> Color(0xFFDC3545)
                                     else -> Color.Gray
                                 }
 
@@ -149,7 +147,6 @@ fun OrderDetailScreen(
                         }
                     }
 
-                    // 2. Khối Địa chỉ & Thông tin người nhận
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -157,23 +154,58 @@ fun OrderDetailScreen(
                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = "Thông tin giao hàng", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0xFFEEEEEE))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "Liên hệ & Giao hàng", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                    
+                                    // 🎯 Nút nhắn tin cho Nhà hàng
+                                    TextButton(onClick = { 
+                                        startChatWithPartner(order.restaurantId, "restaurant", onNavigateToChat) 
+                                    }) {
+                                        Icon(Icons.AutoMirrored.Filled.Chat, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Chat với Quán", fontSize = 12.sp)
+                                    }
+                                }
+                                
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFEEEEEE))
+
+                                if (order.shipperId.isNotBlank()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Person, null, tint = Color(0xFF2159BC), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(text = "Tài xế đang giao", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        
+                                        // 🎯 Nút nhắn tin cho Shipper
+                                        IconButton(onClick = { 
+                                            startChatWithPartner(order.shipperId, "shipper", onNavigateToChat) 
+                                        }) {
+                                            Icon(Icons.AutoMirrored.Filled.Chat, null, tint = Color(0xFF2159BC), modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF2159BC), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Person, null, tint = Color(0xFF2159BC), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = order.customerName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Phone, contentDescription = null, tint = Color(0xFF2159BC), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Phone, null, tint = Color(0xFF2159BC), modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = order.customerPhone, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray)
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.Top) {
-                                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp).padding(top = 2.dp))
+                                    Icon(Icons.Default.LocationOn, null, tint = Color.Red, modifier = Modifier.size(18.dp).padding(top = 2.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = order.customerAddress, fontSize = 14.sp, color = Color.DarkGray, lineHeight = 20.sp)
                                 }
@@ -181,16 +213,14 @@ fun OrderDetailScreen(
                         }
                     }
 
-                    // 3. Tiêu đề danh sách món đặt
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
-                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.ReceiptLong, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(text = "Chi tiết món ăn đã đặt", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                         }
                     }
 
-                    // 4. Danh sách các món ăn trong đơn hàng
                     items(order.items) { item ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -211,90 +241,80 @@ fun OrderDetailScreen(
                                         color = Color.Gray
                                     )
                                 }
-                                Text(
-                                    text = "x${item.quantity}",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.DarkGray,
-                                    modifier = Modifier.padding(horizontal = 16.dp)
-                                )
-                                Text(
-                                    text = String.format(Locale("vi", "VN"), "%,.0fđ", item.price * item.quantity),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Black
-                                )
+                                Text(text = "x${item.quantity}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray, modifier = Modifier.padding(horizontal = 16.dp))
+                                Text(text = String.format(Locale("vi", "VN"), "%,.0fđ", item.price * item.quantity), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                             }
                         }
                     }
 
-                    // 5. Khối Đối soát Tài chính chi tiết (Giá gốc, Tiền giảm, Phí Ship, Voucher, Tổng tiền)
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(text = "Tóm tắt thanh toán", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                                 HorizontalDivider(color = Color(0xFFF5F5F5), thickness = 1.dp)
-
-                                // Tổng tiền hàng gốc trước khi giảm
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("Tổng giá gốc món ăn", color = Color.DarkGray, fontSize = 14.sp)
                                     Text(String.format(Locale("vi", "VN"), "%,.0f đ", order.totalDishPrice), fontSize = 14.sp)
                                 }
-
-                                // Phí vận chuyển
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("Phí giao hàng", color = Color.DarkGray, fontSize = 14.sp)
                                     Text("+ ${String.format(Locale("vi", "VN"), "%,.0f đ", order.shippingFee)}", fontSize = 14.sp)
                                 }
-
-                                // Hiển thị chi tiết Voucher giảm giá (Nếu đơn hàng có áp dụng mã)
                                 if (!order.appliedPromotionId.isNullOrBlank() || order.promotionDiscount > 0) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Column {
                                             Text("Khuyến mãi áp dụng", color = Color.DarkGray, fontSize = 14.sp)
-                                            val tenVoucher = order.appliedPromotionTitle.ifBlank { "Mã giảm giá" }
-                                            Text(text = "($tenVoucher)", fontSize = 12.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Medium)
+                                            Text(text = "(${order.appliedPromotionTitle.ifBlank { "Voucher" }})", fontSize = 12.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Medium)
                                         }
-                                        Text(
-                                            text = "- ${String.format(Locale("vi", "VN"), "%,.0f đ", order.promotionDiscount)}",
-                                            fontSize = 14.sp,
-                                            color = Color.Red,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                                        Text(text = "- ${String.format(Locale("vi", "VN"), "%,.0f đ", order.promotionDiscount)}", fontSize = 14.sp, color = Color.Red, fontWeight = FontWeight.Medium)
                                     }
                                 }
-
                                 HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
-
-                                // Số tiền cuối cùng thực tế khách phải trả
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                     Text("Tổng thanh toán thực tế", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Text(
-                                        text = String.format(Locale("vi", "VN"), "%,.0f đ", order.totalPrice),
-                                        fontSize = 19.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF2159BC)
-                                    )
+                                    Text(text = String.format(Locale("vi", "VN"), "%,.0f đ", order.totalPrice), fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2159BC))
                                 }
                             }
                         }
                     }
-
-                    // Khoảng đệm an toàn dưới cùng danh sách
                     item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
             }
         }
     }
+}
+
+// Hàm bổ trợ để bắt đầu chat
+private fun startChatWithPartner(partnerId: String, partnerRole: String, onNavigate: (String) -> Unit) {
+    if (partnerId.isBlank()) return
+    val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+    val db = FirebaseFirestore.getInstance()
+    
+    db.collection("conversations")
+        .whereArrayContains("participants", currentUid)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val existing = snapshot.documents.find { doc ->
+                val participants = doc.get("participants") as? List<*>
+                participants?.contains(partnerId) == true && doc.getString("type") != "SUPPORT"
+            }
+            
+            if (existing != null) {
+                onNavigate(existing.id)
+            } else {
+                val newDoc = db.collection("conversations").document()
+                val conv = Conversation(
+                    id = newDoc.id,
+                    participants = listOf(currentUid, partnerId),
+                    participantRoles = mapOf(currentUid to "user", partnerId to partnerRole),
+                    lastMessage = "Xin chào!",
+                    lastMessageTime = com.google.firebase.Timestamp.now()
+                )
+                newDoc.set(conv).addOnSuccessListener { onNavigate(newDoc.id) }
+            }
+        }
 }

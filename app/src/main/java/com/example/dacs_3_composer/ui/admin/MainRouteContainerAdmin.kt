@@ -11,10 +11,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.dacs_3_composer.ui.admin.analytics.AdminAnalyticsScreen
 import com.example.dacs_3_composer.ui.admin.complaint.AdminComplaintScreen
 import com.example.dacs_3_composer.ui.admin.customer.AdminCustomerScreen
@@ -22,6 +24,8 @@ import com.example.dacs_3_composer.ui.admin.profile.AdminProfileScreen
 import com.example.dacs_3_composer.ui.admin.payments.AdminPaymentScreen
 import com.example.dacs_3_composer.ui.admin.settings.AdminPromotionScreen
 import com.example.dacs_3_composer.ui.admin.settings.AdminPromotionViewModel
+import com.example.dacs_3_composer.ui.chat.MessageCenterScreen
+import com.example.dacs_3_composer.ui.chat.ChatDetailScreen
 
 @Composable
 fun MainRouteContainerAdmin(
@@ -30,118 +34,103 @@ fun MainRouteContainerAdmin(
 ) {
     val navController = rememberNavController()
 
-    // Danh sách 5 mục hiển thị dưới thanh BottomBar điều hướng của Super Admin
     val navigationItems = listOf(
         NavigationAdmin.Overview,
-//         NavigationAdmin.Orders,
         NavigationAdmin.Customers,
         NavigationAdmin.Promotions,
         NavigationAdmin.Profile
     )
 
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    // 🎯 CẬP NHẬT: Ẩn BottomBar khi vào mục Chat
+    val showBottomBar = currentRoute !in listOf("message_center", "chat_detail/{conversationId}")
+
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
-                containerColor = Color.White,
-                tonalElevation = 8.dp
-            ) {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-
-                navigationItems.forEach { item ->
-                    val isSelected = currentRoute == item.route
-
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (currentRoute != item.route) {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+            if (showBottomBar) {
+                NavigationBar(
+                    modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+                    containerColor = Color.White,
+                    tonalElevation = 8.dp
+                ) {
+                    navigationItems.forEach { item ->
+                        val isSelected = currentRoute == item.route
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (currentRoute != item.route) {
+                                    navController.navigate(item.route) {
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            }
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = item.title,
-                                modifier = Modifier.size(24.dp)
+                            },
+                            icon = { Icon(imageVector = item.icon, contentDescription = item.title, modifier = Modifier.size(24.dp)) },
+                            label = { Text(text = item.title, style = MaterialTheme.typography.labelSmall) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                selectedTextColor = Color(0xFF2159BC),
+                                indicatorColor = Color(0xFF2159BC),
+                                unselectedIconColor = Color(0xFFC4C7C5),
+                                unselectedTextColor = Color(0xFF727785)
                             )
-                        },
-                        label = {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            selectedTextColor = Color(0xFF2159BC), // Màu xanh chủ đạo của app
-                            indicatorColor = Color(0xFF2159BC),
-                            unselectedIconColor = Color(0xFFC4C7C5),
-                            unselectedTextColor = Color(0xFF727785)
                         )
-                    )
+                    }
                 }
             }
         }
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = NavigationAdmin.Overview.route, // Màn hình mặc định ban đầu là Báo cáo & Thống kê
+            startDestination = NavigationAdmin.Overview.route,
             modifier = Modifier.padding(paddingValues)
         ) {
-            // Tab 1: Báo cáo & Thống kê
             composable(NavigationAdmin.Overview.route) {
-                AdminAnalyticsScreen()
+                AdminAnalyticsScreen(
+                    onNavigateToChat = { navController.navigate("message_center") } // ✅ ĐIỀU HƯỚNG CHAT
+                )
             }
 
-            // Tab 2: Đơn hàng & Xử lý Khiếu nại
-            composable(NavigationAdmin.Orders.route) {
-                AdminComplaintScreen()
-            }
+            composable(NavigationAdmin.Orders.route) { AdminComplaintScreen() }
 
-//            composable(NavigationAdmin.Categories.route) {
-//                AdminCategoryScreen()
-//            }
+            composable(NavigationAdmin.Customers.route) { AdminCustomerScreen() }
 
-            // Tab 5: Quản lý Khách hàng (Nhãn hiển thị UI: Cá nhân)
-            composable(NavigationAdmin.Customers.route) {
-                AdminCustomerScreen()
-            }
-
-            // Tab 3: Quản lý Hồ sơ & Cài đặt hệ thống
             composable(NavigationAdmin.Profile.route) {
-                // 🎯 Đã loại bỏ 'onNavigateToAccountInfo' để khớp hoàn toàn với cấu trúc Dialog sửa tại chỗ của Screen
                 AdminProfileScreen(
-                    onNavigateToVehicleManagement = { /* Điều hướng tới màn hình quản lý xe nếu có */ },
-                    onNavigateToNotification = { /* Điều hướng tới màn hình Payout Settings hoặc thông báo */ },
-                    onNavigateToSupport = { /* Điều hướng tới bộ phận hỗ trợ */ },
+                    onNavigateToVehicleManagement = { },
+                    onNavigateToNotification = { },
+                    onNavigateToSupport = { navController.navigate("message_center") }, // ✅ Tận dụng message center cho admin
                     onLogoutCallbackk = (onLogoutCallback)
                 )
             }
-            composable(NavigationAdmin.Promotions.route) {
-                // Khởi tạo ViewModel cho màn hình Voucher Admin
-                val promotionViewModel: AdminPromotionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
+            composable(NavigationAdmin.Promotions.route) {
+                val promotionViewModel: AdminPromotionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 AdminPromotionScreen(
                     viewModel = promotionViewModel,
-                    onBackClick = {
-                        // Khi nhấn nút Back tại top bar, quay về màn hình Overview mặc định của Admin
-                        navController.navigate(NavigationAdmin.Overview.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onBackClick = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize()
                 )
+            }
+
+            // 🎯 THÊM ROUTE CHAT CHO ADMIN
+            composable("message_center") {
+                MessageCenterScreen(
+                    onConversationClick = { convId -> navController.navigate("chat_detail/$convId") },
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = "chat_detail/{conversationId}",
+                arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val convId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                ChatDetailScreen(conversationId = convId, onBackClick = { navController.popBackStack() })
             }
         }
     }

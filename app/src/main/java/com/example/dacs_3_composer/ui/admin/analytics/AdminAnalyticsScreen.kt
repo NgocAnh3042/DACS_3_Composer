@@ -14,13 +14,17 @@ import com.example.dacs_3_composer.ui.admin.analytics.components.*
 
 @Composable
 fun AdminAnalyticsScreen(
+    onNavigateToChat: () -> Unit = {}, // 🎯 THÊM: Tham số điều hướng chat
     viewModel: AdminAnalyticsViewModel = viewModel()
 ) {
-    // Thu thập dữ liệu realtime tự động đẩy về từ Firestore backend
     val analyticsData by viewModel.analyticsState.collectAsState()
 
     Scaffold(
-        topBar = { AnalyticsTopBar() },
+        topBar = { 
+            AnalyticsTopBar(
+                onChatClick = onNavigateToChat // 🎯 TRUYỀN: Sự kiện click
+            ) 
+        },
         containerColor = Color(0xFFF8F9FA)
     ) { innerPadding ->
         LazyColumn(
@@ -33,17 +37,14 @@ fun AdminAnalyticsScreen(
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
-            // 1. Đổ dữ liệu thật vào các ô lưới thống kê (Người dùng, Nhà hàng, Shipper, Đơn hàng...)
             item {
                 OverviewStatsGrid(data = analyticsData)
             }
 
-            // 2. Đổ dữ liệu mảng doanh thu thực tính toán từ Firebase lên biểu đồ cột
             item {
                 RevenueChartCard(revenueDays = analyticsData.weeklyRevenue)
             }
 
-            // 3. Khối thông tin gợi ý chuyên sâu dưới đáy
             item { DeepInsightCard() }
         }
     }

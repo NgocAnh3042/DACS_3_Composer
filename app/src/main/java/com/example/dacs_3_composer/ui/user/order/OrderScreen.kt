@@ -8,21 +8,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.dacs_3_composer.R
-import com.example.dacs_3_composer.data.model.OrderStatus
-import com.example.dacs_3_composer.data.model.Restaurant
 import com.example.dacs_3_composer.ui.user.order.components.EmptyOrderState
 import com.example.dacs_3_composer.ui.user.order.components.HistoryOrderItem
 import com.example.dacs_3_composer.ui.user.order.components.OngoingOrderItem
@@ -32,9 +29,10 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderScreen(
-    suggestedRestaurants: List<Restaurant>,
+    suggestedRestaurants: List<com.example.dacs_3_composer.data.model.Restaurant>,
     chuyenHienThiTrangChiTiet: (String) -> Unit,
     onNavigateToPayment: (String, Double) -> Unit = { _, _ -> },
+    onNavigateToChat: () -> Unit = {}, // 🎯 THÊM: Callback nhắn tin
     orderViewModel: OrderViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -57,14 +55,22 @@ fun OrderScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(text = "Đơn hàng", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF191C1D))
-                        IconButton(onClick = { }) {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = "Tìm kiếm", tint = Color(0xFF191C1D), modifier = Modifier.size(24.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // 🎯 THÊM: Icon Chat cho đồng bộ
+                            IconButton(onClick = onNavigateToChat) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.Chat, contentDescription = "Tin nhắn", tint = Color(0xFF191C1D))
+                            }
+                            IconButton(onClick = { }) {
+                                Icon(imageVector = Icons.Default.Search, contentDescription = "Tìm kiếm", tint = Color(0xFF191C1D), modifier = Modifier.size(24.dp))
+                            }
                         }
                     }
                 }
             )
         }
     ) { paddingValues ->
+        // ... (Giữ nguyên toàn bộ nội dung bên dưới)
         Box(modifier = modifier.fillMaxSize().background(Color(0xFFF8F9FA)).padding(paddingValues)) {
             Column(modifier = Modifier.fillMaxSize()) {
                 OrderTabBar(selectedTabIndex = selectedTabIndex, onTabSelected = { selectedTabIndex = it })
@@ -78,7 +84,8 @@ fun OrderScreen(
                         when (selectedTabIndex) {
                             0 -> { 
                                 val pendingOrders = ongoingOrders.filter { 
-                                    it.status == OrderStatus.PENDING_PAYMENT.name || it.status == OrderStatus.WAITING_RESTAURANT.name || it.status == "PENDING"
+                                    val s = it.status.uppercase().trim()
+                                    s == "PENDING_PAYMENT" || s == "PENDING"
                                 }
 
                                 if (pendingOrders.isEmpty()) {
@@ -87,6 +94,7 @@ fun OrderScreen(
                                     items(pendingOrders) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val imgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
+                                        val currentStatus = order.status.uppercase().trim()
 
                                         Card(
                                             modifier = Modifier.fillMaxWidth(),
@@ -95,21 +103,25 @@ fun OrderScreen(
                                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                                         ) {
                                             Column(modifier = Modifier.padding(16.dp)) {
-                                                val statusMsg = if (order.status == OrderStatus.PENDING_PAYMENT.name) "Đang chờ thanh toán" else "Quán đang xem đơn hàng..."
+                                                val statusMsg = when(currentStatus) {
+                                                    "PENDING_PAYMENT" -> "đang chờ bạn thanh toán qua PayOS"
+                                                    "PENDING" -> "đang chờ nhà hàng xác nhận"
+                                                    else -> "Đang xử lý..."
+                                                }
                                                 OngoingOrderItem(
                                                     restaurantName = order.restaurantName,
                                                     statusText = statusMsg,
-                                                    estimatedTime = "Mã đơn: ..${order.id.takeLast(6)}",
+                                                    estimatedTime = "Mã đơn: ..${order.id.takeLast(6).uppercase()}",
                                                     itemsSummary = itemsSummaryText,
                                                     restaurantImageUrl = imgUrl,
-                                                    paymentMethod = order.paymentMethod, // ✅ Truyền thêm phương thức thanh toán
+                                                    paymentMethod = order.paymentMethod,
                                                     chuyenTheoDoiDonHang = { chuyenHienThiTrangChiTiet(order.id) }
                                                 )
 
                                                 Spacer(modifier = Modifier.height(12.dp))
 
                                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    if (order.status == OrderStatus.PENDING_PAYMENT.name) {
+                                                    if (currentStatus == "PENDING_PAYMENT") {
                                                         Button(
                                                             onClick = { onNavigateToPayment(order.id, order.totalPrice) },
                                                             shape = RoundedCornerShape(14.dp),
@@ -141,7 +153,8 @@ fun OrderScreen(
                             }
                             1 -> { 
                                 val activeOrders = ongoingOrders.filter { 
-                                    it.status == OrderStatus.PROCESSING.name || it.status == OrderStatus.ACCEPTED.name || it.status == OrderStatus.SHIPPING.name
+                                    val s = it.status.uppercase().trim()
+                                    s == "PROCESSING" || s == "ACCEPTED" || s == "SHIPPING"
                                 }
                                 if (activeOrders.isEmpty()) {
                                     item {
@@ -153,6 +166,7 @@ fun OrderScreen(
                                     items(activeOrders) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val imgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
+                                        val currentStatus = order.status.uppercase().trim()
                                         
                                         Card(
                                             modifier = Modifier.fillMaxWidth(),
@@ -161,16 +175,16 @@ fun OrderScreen(
                                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                                         ) {
                                             Column(modifier = Modifier.padding(16.dp)) {
-                                                val statusMsg = when(order.status) {
-                                                    OrderStatus.PROCESSING.name -> "Đang nấu món"
-                                                    OrderStatus.ACCEPTED.name -> "Chờ tài xế lấy hàng"
-                                                    OrderStatus.SHIPPING.name -> "Đang giao đến bạn"
+                                                val statusMsg = when(currentStatus) {
+                                                    "PROCESSING" -> "đang được nhà hàng chuẩn bị (đang nấu)"
+                                                    "ACCEPTED" -> "đã nấu xong và đang chờ shipper lấy hàng"
+                                                    "SHIPPING" -> "đang trên đường giao đến bạn"
                                                     else -> ""
                                                 }
                                                 OngoingOrderItem(
                                                     restaurantName = order.restaurantName,
                                                     statusText = statusMsg,
-                                                    estimatedTime = "Mã đơn: ..${order.id.takeLast(6)}",
+                                                    estimatedTime = "Mã đơn: ..${order.id.takeLast(6).uppercase()}",
                                                     itemsSummary = itemsSummaryText,
                                                     restaurantImageUrl = imgUrl,
                                                     paymentMethod = order.paymentMethod,
@@ -200,9 +214,11 @@ fun OrderScreen(
                                 } else {
                                     items(historyOrders) { order ->
                                         val historyItemsSummary = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
-                                        val displayStatus = if (order.status == "CANCELLED") " - Đã hủy" else " - Hoàn thành"
+                                        val s = order.status.uppercase().trim()
+                                        val displayStatus = if (s == "CANCELLED") " - đã bị hủy" else " - đã được giao thành công"
                                         val historyImgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
-                                        val dinhDangGia = String.format(Locale("vi", "VN"), "%,.0f đ", order.totalPrice)
+                                        val localeVi = Locale.forLanguageTag("vi-VN")
+                                        val dinhDangGia = String.format(localeVi, "%,.0f đ", order.totalPrice)
 
                                         HistoryOrderItem(
                                             restaurantName = order.restaurantName.ifBlank { "Cửa hàng đối tác" } + displayStatus,

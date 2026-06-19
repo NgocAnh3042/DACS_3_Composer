@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,7 +27,8 @@ fun Header(
     userName: String,
     userAddress: String,
     userImageUrl: String,
-    onSearchAction: (String) -> Unit // 🌟 THÊM THAM SỐ NÀY ĐỂ BẮN TỪ KHÓA ĐI
+    onSearchAction: (String) -> Unit,
+    onChatClick: () -> Unit // 🎯 THÊM: Sự kiện khi bấm vào icon Chat
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
@@ -56,6 +58,15 @@ fun Header(
 
             Spacer(modifier = Modifier.width(8.dp))
 
+            // 🎯 THÊM: Icon Chat phong cách Restaurant
+            IconButton(onClick = onChatClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = "Tin nhắn",
+                    tint = Color(0xFF191C1D)
+                )
+            }
+
             AsyncImage(
                 model = userImageUrl.ifBlank { R.drawable.ic_avatar_default },
                 placeholder = painterResource(id = R.drawable.ic_avatar_default),
@@ -80,7 +91,6 @@ fun Header(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(25.dp),
             singleLine = true,
-            // 🌟 THÊM: Bấm nút Search trên bàn phím điện thoại để tìm kiếm luôn
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
                 onSearch = {
