@@ -20,10 +20,10 @@ fun AdminAnalyticsScreen(
     val analyticsData by viewModel.analyticsState.collectAsState()
 
     Scaffold(
-        topBar = {
+        topBar = { 
             AnalyticsTopBar(
                 onChatClick = onNavigateToChat // 🎯 TRUYỀN: Sự kiện click
-            )
+            ) 
         },
         containerColor = Color(0xFFF8F9FA)
     ) { innerPadding ->

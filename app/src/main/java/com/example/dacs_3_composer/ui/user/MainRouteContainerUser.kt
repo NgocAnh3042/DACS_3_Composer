@@ -47,7 +47,8 @@ import com.example.dacs_3_composer.data.repository.PaymentRepository
 import com.example.dacs_3_composer.ui.user.payment.PaymentScreen
 import com.example.dacs_3_composer.ui.user.payment.PaymentViewModel
 import com.example.dacs_3_composer.ui.user.payment.PaymentHistoryScreen
-import okhttp3.ConnectionPool
+import com.example.dacs_3_composer.ui.chat.MessageCenterScreen
+import com.example.dacs_3_composer.ui.chat.ChatDetailScreen
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.logging.HttpLoggingInterceptor
@@ -64,7 +65,6 @@ fun MainRouteContainerUser(
     val cartViewModel: CartViewModel = viewModel()
     val orderViewModel: OrderViewModel = viewModel()
 
-    // ✅ CẤU HÌNH TỐI ƯU CHO KẾT NỐI LOCAL
     val okHttpClient = remember {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
@@ -81,7 +81,6 @@ fun MainRouteContainerUser(
             .build()
     }
 
-    // ✅ KHÔNG DÙNG REMEMBER ĐỂ TRÁNH CACHED GIÁ TRỊ CŨ 8080
     val retrofit = Retrofit.Builder()
         .baseUrl("http://127.0.0.1:8888/")
         .client(okHttpClient)
@@ -116,9 +115,28 @@ fun MainRouteContainerUser(
         Box(modifier = Modifier.padding(padding)) {
             NavHost(navController = navController, startDestination = "home") {
                 composable("home") {
-                    HomeScreen(navController = navController, onNavigateToSearch = { query -> navController.navigate("search/$query") })
+                    HomeScreen(
+                        navController = navController,
+                        onNavigateToSearch = { query -> navController.navigate("search/$query") },
+                        onNavigateToChat = { navController.navigate("message_center") }
+                    )
                 }
                 composable("notification") { NotificationScreen() }
+                
+                composable("message_center") {
+                    MessageCenterScreen(
+                        onConversationClick = { convId -> navController.navigate("chat_detail/$convId") },
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = "chat_detail/{conversationId}",
+                    arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val convId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                    ChatDetailScreen(conversationId = convId, onBackClick = { navController.popBackStack() })
+                }
+
                 composable("search/{query}") { backStackEntry ->
                     val query = backStackEntry.arguments?.getString("query") ?: ""
                     SearchScreen(searchQuery = query, navController = navController, onBackClick = { navController.popBackStack() })
@@ -142,7 +160,6 @@ fun MainRouteContainerUser(
                     val orderId = backStackEntry.arguments?.getString("orderId") ?: ""
                     val status = backStackEntry.arguments?.getString("status")
 
-                    // ✅ XỬ LÝ CẬP NHẬT TRẠNG THÁI KHI QUAY LẠI TỪ PAYOS
                     LaunchedEffect(status) {
                         if (status == "PAID") {
                             orderViewModel.updateOrderToPaid(orderId)
@@ -153,7 +170,8 @@ fun MainRouteContainerUser(
                         orderId = orderId,
                         orderViewModel = orderViewModel,
                         onBackClick = { navController.popBackStack() },
-                        onNavigateToPayment = { id, amount -> navController.navigate("payment/$id/$amount") }
+                        onNavigateToPayment = { id, amount -> navController.navigate("payment/$id/$amount") },
+                        onNavigateToChat = { convId -> navController.navigate("chat_detail/$convId") } // ✅ KẾT NỐI CHAT
                     )
                 }
                 composable("profile") {
@@ -161,7 +179,8 @@ fun MainRouteContainerUser(
                         onLogoutClick = onLogout,
                         onNavigateToOrderHistory = { navController.navigate("order") { launchSingleTop = true } },
                         onNavigateToManageAddress = { navController.navigate("manage_address") },
-                        onNavigateToPaymentHistory = { navController.navigate("payment_history") }
+                        onNavigateToPaymentHistory = { navController.navigate("payment_history") },
+                        onNavigateToChatDetail = { convId -> navController.navigate("chat_detail/$convId") } // ✅ KẾT NỐI HỖ TRỢ
                     )
                 }
                 composable("manage_address") {
@@ -176,7 +195,8 @@ fun MainRouteContainerUser(
                         restaurantId = restaurantId, cartViewModel = cartViewModel,
                         onBackClick = { navController.popBackStack() },
                         onAddToCart = { dish -> cartViewModel.addToCart(dish) },
-                        onViewCartClick = { navController.navigate("cart") }
+                        onViewCartClick = { navController.navigate("cart") },
+                        onNavigateToChat = { convId -> navController.navigate("chat_detail/$convId") } // ✅ KẾT NỐI CHAT QUÁN
                     )
                 }
                 composable("cart") {

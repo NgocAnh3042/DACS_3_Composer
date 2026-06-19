@@ -24,6 +24,7 @@ data class Order(
     var time: String = "",
     var status: String = "PENDING_PAYMENT",
     var paymentMethod: String = "CASH", // "CASH" (COD) hoặc "ONLINE" (PayOS)
+    var isPaid: Boolean = false, // ✅ Thêm trường xác nhận đã thanh toán
 
     // Cấu trúc tiền tệ và Khuyến mãi
     var totalDishPrice: Double = 0.0,    // Giá gốc tổng các món ăn
@@ -57,10 +58,9 @@ data class Order(
 ) {
     // Constructor không tham số bắt buộc để Firebase Firestore ánh xạ (mapping) tự động mượt mà
     constructor() : this(
-        id = "", time = "", status = "PENDING_PAYMENT", paymentMethod = "CASH",
+        id = "", time = "", status = "PENDING_PAYMENT", paymentMethod = "CASH", isPaid = false,
         totalDishPrice = 0.0, shippingFee = 20000.0, totalPrice = 0.0,
 
-        // Khởi tạo giá trị mặc định an toàn cho các trường khuyến mãi mới
         appliedPromotionId = null,
         appliedPromotionTitle = "",
         promotionDiscount = 0.0,

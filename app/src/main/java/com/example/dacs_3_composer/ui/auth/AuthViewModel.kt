@@ -1,6 +1,7 @@
 package com.example.dacs_3_composer.ui.auth
 
 import android.content.Context
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.lifecycle.ViewModel
@@ -14,6 +15,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
 
 class AuthViewModel : ViewModel() {
 
@@ -63,7 +65,7 @@ class AuthViewModel : ViewModel() {
                                                 if (role == "restaurant") {
                                                     logLogin(uid)
                                                 }
-                                                triggerLoginSuccessByRole(role)
+                                                triggerLoginSuccessByRole(context, role)
                                             } else {
                                                 val userMap = hashMapOf(
                                                     "email" to email,
@@ -71,7 +73,7 @@ class AuthViewModel : ViewModel() {
                                                 )
                                                 db.collection("users").document(uid).set(userMap)
                                                     .addOnSuccessListener {
-                                                        triggerLoginSuccessByRole("user")
+                                                        triggerLoginSuccessByRole(context, "user")
                                                     }
                                                     .addOnFailureListener { e ->
                                                         _authState.value = "Lỗi tạo thông tin dữ liệu Google: ${e.message}"
@@ -90,7 +92,7 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun registerUser(fullName: String, phoneNumber: String, email: String, password: String, confirmPass: String, role: String) {
+    fun registerUser(context: Context, fullName: String, phoneNumber: String, email: String, password: String, confirmPass: String, role: String) {
         if (fullName.isEmpty() || phoneNumber.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPass.isEmpty()) {
             _authState.value = "Vui lòng nhập đầy đủ thông tin!"
             return
@@ -110,10 +112,14 @@ class AuthViewModel : ViewModel() {
                             "fullName" to fullName,
                             "phoneNumber" to phoneNumber,
                             "email" to email,
-                            "role" to role // Use the selected role
+                            "role" to role
                         )
                         db.collection("users").document(uid).set(userMap)
                             .addOnSuccessListener {
+                                // ✅ LƯU ROLE VÀO MÁY NGAY KHI ĐĂNG KÝ
+                                val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                                sharedPrefs.edit().putString("user_role", role).apply()
+
                                 _authState.value = "Đăng ký thành công!"
                             }.addOnFailureListener { e->
                                 _authState.value = "Tạo tài khoản thành công nhưng lỗi database: ${e.message}."
@@ -125,7 +131,7 @@ class AuthViewModel : ViewModel() {
             }
     }
 
-    fun loginUser(email: String, password: String) {
+    fun loginUser(context: Context, email: String, password: String) {
         if (email.isEmpty() || password.isEmpty()) {
             _authState.value = "Vui lòng không để trống Email/Password!"
             return
@@ -144,9 +150,9 @@ class AuthViewModel : ViewModel() {
                                     if (role == "restaurant") {
                                         logLogin(uid)
                                     }
-                                    triggerLoginSuccessByRole(role)
+                                    triggerLoginSuccessByRole(context, role)
                                 } else {
-                                    triggerLoginSuccessByRole("user")
+                                    triggerLoginSuccessByRole(context, "user")
                                 }
                             }
                             .addOnFailureListener { e ->
@@ -169,7 +175,11 @@ class AuthViewModel : ViewModel() {
         )
     }
 
-    private fun triggerLoginSuccessByRole(role: String) {
+    private fun triggerLoginSuccessByRole(context: Context, role: String) {
+        // ✅ LƯU ROLE VÀO MÁY ĐỂ KHI MỞ LẠI APP KHÔNG BỊ NHẦM THÀNH USER
+        val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().putString("user_role", role).apply()
+
         when (role) {
             "admin" -> _authState.value = "Đăng nhập Admin thành công!"
             "restaurant" -> _authState.value = "Đăng nhập Restaurant thành công!"
@@ -178,8 +188,11 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun logoutUser() {
+    fun logoutUser(context: Context) {
         auth.signOut()
+        // ✅ XÓA ROLE KHI ĐĂNG XUẤT
+        val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().remove("user_role").apply()
         _authState.value = "Đã đăng xuất!"
     }
 

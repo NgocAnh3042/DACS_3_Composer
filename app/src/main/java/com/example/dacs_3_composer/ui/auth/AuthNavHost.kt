@@ -84,12 +84,12 @@ fun AuthNavHost(
         composable(route = AuthScreen.Login.route) {
             LoginScreen(
                 onLoginClick = { email, password ->
-                    authViewModel.loginUser(email, password)
+                    // ✅ ĐÃ FIX: Thêm context vào đầu
+                    authViewModel.loginUser(context, email, password)
                 },
                 onSignUpClick = {
                     navController.navigate(AuthScreen.SignUp.route)
                 },
-                onFacebookClick = { /* Xử lý FB */ },
                 onGoogleClick = {
                     authViewModel.loginWithGoogle(context)
                 }
@@ -99,7 +99,8 @@ fun AuthNavHost(
         composable(route = AuthScreen.SignUp.route) {
             RegisterScreen(
                 onRegisterClick = { fullName, phoneNumber, email, password, confirmPass, role ->
-                    authViewModel.registerUser(fullName, phoneNumber, email, password, confirmPass, role)
+                    // ✅ ĐÃ FIX: Thêm context vào đầu
+                    authViewModel.registerUser(context, fullName, phoneNumber, email, password, confirmPass, role)
                 },
                 onNavigateToLogin = {
                     navController.popBackStack()
@@ -110,7 +111,8 @@ fun AuthNavHost(
         composable(route = "user_home") {
             MainRouteContainerUser(
                 onLogout = {
-                    authViewModel.logoutUser()
+                    // ✅ ĐÃ FIX: Thêm context vào đầu
+                    authViewModel.logoutUser(context)
                     navController.navigate(AuthScreen.Login.route) {
                         popUpTo(0) { inclusive = true }
                     }

@@ -6,8 +6,8 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.InsertChart
 import androidx.compose.material.icons.filled.Moped
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.People
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class NavigationAdmin(val route: String, val title: String, val icon: ImageVector) {

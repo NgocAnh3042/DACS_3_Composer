@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ fun OverviewTopBar(
     adminName: String = "Gourmet Admin",
     avatarUrl: String = "",
     onNotificationClick: () -> Unit = {},
+    onChatClick: () -> Unit = {}, // 🎯 THÊM: Callback nhắn tin
     onAvatarClick: () -> Unit = {}
 ) {
     Row(
@@ -69,6 +71,17 @@ fun OverviewTopBar(
                 color = Color(0xFF2159BC)
             )
         }
+
+        // 🎯 THÊM: Icon Chat cho Admin
+        IconButton(onClick = onChatClick) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Chat,
+                contentDescription = "Tin nhắn",
+                tint = Color(0xFF2159BC),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
         IconButton(onClick = onNotificationClick) {
             BadgedBox(
                 badge = {

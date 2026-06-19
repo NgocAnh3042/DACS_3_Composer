@@ -24,6 +24,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 @Composable
 fun ShipperDashboardScreen(
     onOrderClick: (String) -> Unit,
+    onNavigateToChat: () -> Unit, // 🎯 THÊM: Tham số điều hướng chat
     shipperViewModel: ShipperViewModel = viewModel(),
     profileViewModel: ShipperProfileViewModel = viewModel()
 ) {
@@ -42,7 +43,6 @@ fun ShipperDashboardScreen(
         android.Manifest.permission.ACCESS_FINE_LOCATION
     )
 
-    // 🌟 ĐÃ CẬP NHẬT: Kích hoạt toàn bộ listener của ViewModel một cách an toàn khi UI khởi tạo
     LaunchedEffect(shipperViewModel.currentShipperId) {
         if (shipperViewModel.currentShipperId.isNotBlank()) {
             shipperViewModel.startAllListeners()
@@ -68,7 +68,12 @@ fun ShipperDashboardScreen(
     }
 
     Scaffold(
-        topBar = { ShipperDashboardTopBar(user = user) },
+        topBar = { 
+            ShipperDashboardTopBar(
+                user = user,
+                onChatClick = onNavigateToChat // 🎯 TRUYỀN: Sự kiện click Chat
+            ) 
+        },
         containerColor = Color(0xFFF8F9FA)
     ) { innerPadding ->
         LazyColumn(

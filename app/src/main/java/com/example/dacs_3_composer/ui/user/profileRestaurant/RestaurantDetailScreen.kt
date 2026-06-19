@@ -7,7 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +24,9 @@ import com.example.dacs_3_composer.data.model.DishItem
 import com.example.dacs_3_composer.ui.user.profileRestaurant.components.DishRowUserItem
 import com.example.dacs_3_composer.ui.user.profileRestaurant.components.RestaurantInfoUserCard
 import com.example.dacs_3_composer.ui.user.cart.CartViewModel
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.dacs_3_composer.data.model.Conversation
 
 @Composable
 fun RestaurantDetailScreen(
@@ -30,9 +34,12 @@ fun RestaurantDetailScreen(
     onBackClick: () -> Unit,
     onAddToCart: (DishItem) -> Unit,
     onViewCartClick: () -> Unit,
+    onNavigateToChat: (String) -> Unit = {}, // 🎯 THÊM: Callback đi đến chat
     viewModel: UserStoreViewModel = viewModel(),
     cartViewModel: CartViewModel = viewModel()
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    
     LaunchedEffect(restaurantId) {
         viewModel.fetchStoreDataForUser(restaurantId)
     }
@@ -40,7 +47,6 @@ fun RestaurantDetailScreen(
     val restaurant = viewModel.restaurantDetail.value
     val dishes = viewModel.dishesList.value
 
-    // 🌟 ĐỒNG BỘ TỰ ĐỘNG: Ghi nhớ thông tin quán ăn vào CartViewModel khi dữ liệu tải về thành công
     LaunchedEffect(restaurant) {
         if (restaurant != null) {
             cartViewModel.currentRestaurantId = restaurant.id
@@ -130,13 +136,30 @@ fun RestaurantDetailScreen(
                             contentScale = ContentScale.Crop
                         )
 
-                        IconButton(
-                            onClick = onBackClick,
+                        Row(
                             modifier = Modifier
-                                .padding(16.dp)
-                                .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.Black)
+                            IconButton(
+                                onClick = onBackClick,
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
+                            }
+
+                            // 🎯 THÊM: Nút Chat với Nhà hàng
+                            IconButton(
+                                onClick = {
+                                    startChatWithRestaurant(restaurant.id, restaurant.name, onNavigateToChat)
+                                },
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", tint = Color(0xFF1E56A0))
+                            }
                         }
                     }
                 }
@@ -164,4 +187,34 @@ fun RestaurantDetailScreen(
             }
         }
     }
+}
+
+// Logic khởi tạo chat giống Repository nhưng đặt tại UI để tiện điều hướng
+private fun startChatWithRestaurant(resId: String, resName: String, onNavigate: (String) -> Unit) {
+    val currentUid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+    val db = FirebaseFirestore.getInstance()
+    
+    db.collection("conversations")
+        .whereArrayContains("participants", currentUid)
+        .get()
+        .addOnSuccessListener { snapshot ->
+            val existing = snapshot.documents.find { doc ->
+                val participants = doc.get("participants") as? List<*>
+                participants?.contains(resId) == true && doc.getString("type") != "SUPPORT"
+            }
+            
+            if (existing != null) {
+                onNavigate(existing.id)
+            } else {
+                val newDoc = db.collection("conversations").document()
+                val conv = Conversation(
+                    id = newDoc.id,
+                    participants = listOf(currentUid, resId),
+                    participantRoles = mapOf(currentUid to "user", resId to "restaurant"),
+                    lastMessage = "Chào bạn! Tôi muốn hỏi về thực đơn.",
+                    lastMessageTime = com.google.firebase.Timestamp.now()
+                )
+                newDoc.set(conv).addOnSuccessListener { onNavigate(newDoc.id) }
+            }
+        }
 }

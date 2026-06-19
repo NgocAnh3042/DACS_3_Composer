@@ -74,13 +74,16 @@ class OrderViewModel : ViewModel() {
             }
     }
 
-    // ✅ HÀM MỚI: Cập nhật trạng thái đơn hàng thành đã thanh toán
+    // ✅ CẬP NHẬT: Đánh dấu đã thanh toán và chuyển trạng thái cho nhà hàng
     fun updateOrderToPaid(orderId: String) {
         if (orderId.isBlank()) return
         firestore.collection("orders").document(orderId)
-            .update("status", OrderStatus.PENDING.name)
+            .update(
+                "status", OrderStatus.PENDING.name,
+                "isPaid", true // Shipper sẽ nhìn thấy đơn đã trả tiền
+            )
             .addOnSuccessListener {
-                Log.d("OrderViewModel", "✅ Đơn hàng $orderId đã được cập nhật thành PENDING (Đã thanh toán)")
+                Log.d("OrderViewModel", "✅ Đơn hàng $orderId đã cập nhật PAID & WAITING_RESTAURANT")
             }
             .addOnFailureListener { e ->
                 Log.e("OrderViewModel", "❌ Lỗi cập nhật đơn hàng $orderId: ${e.message}")
