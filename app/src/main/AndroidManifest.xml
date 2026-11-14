@@ -3,6 +3,7 @@
     xmlns:tools="http://tools.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
@@ -23,9 +24,13 @@
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"> <!-- ✅ Thêm dòng này -->
 
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="GIÁ_TRỊ_API_KEY_CỦA_BẠN" />
+        <service
+            android:name=".data.firebase.FirebasePushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <activity
             android:name=".MainActivity"

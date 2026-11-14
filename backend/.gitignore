@@ -1,0 +1,6 @@
+/config.local.php
+/config.*.local.php
+/service-account.json
+/logs/
+/deploy/*.local.*
+/deploy/__pycache__/

@@ -1,12 +1,16 @@
 package com.example.dacs_3_composer.data.repository
 
-import com.example.dacs_3_composer.data.model.ActivityLog
-import com.google.firebase.firestore.FirebaseFirestore
-import java.text.SimpleDateFormat
-import java.util.*
+import com.example.dacs_3_composer.core.model.ActivityLog
+import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.google.gson.JsonObject
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class ActivityLogRepository {
-    private val firestore = FirebaseFirestore.getInstance()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun logActivity(
         restaurantId: String,
@@ -19,30 +23,16 @@ class ActivityLogRepository {
     ) {
         if (restaurantId.isBlank()) return
 
-        val calendar = Calendar.getInstance()
-        val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-        // Fix deprecated Locale constructor
-        val localeVi = Locale.forLanguageTag("vi-VN")
-        val dateFormat = SimpleDateFormat("dd 'Tháng' MM", localeVi)
-        
-        // Tự động xác định nhãn ngày (Hôm nay, Hôm qua, hoặc ngày cụ thể)
-        val dateLabel = "Hôm nay, " + dateFormat.format(calendar.time)
-
-        val log = ActivityLog(
-            title = title,
-            description = description,
-            time = timeFormat.format(calendar.time),
-            date = dateLabel,
-            timestamp = System.currentTimeMillis(),
-            type = type,
-            details = details,
-            imageUrl = imageUrl,
-            extraInfo = extraInfo
-        )
-
-        firestore.collection("restaurants")
-            .document(restaurantId)
-            .collection("activity_logs")
-            .add(log)
+        val payload = JsonObject().apply {
+            addProperty("actorUid", FirebaseAuth.getInstance().currentUser?.uid ?: restaurantId)
+            addProperty("type", type)
+            addProperty("title", title)
+            addProperty("description", description)
+            addProperty("details", details)
+            addProperty("imageUrl", imageUrl)
+        }
+        scope.launch {
+            runCatching { FoodHubClient.api.create("activity_logs", payload) }
+        }
     }
 }

@@ -1,11 +1,16 @@
 package com.example.dacs_3_composer
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -13,20 +18,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.dacs_3_composer.ui.admin.MainRouteContainerAdmin
-import com.example.dacs_3_composer.ui.auth.AuthViewModel
-import com.example.dacs_3_composer.ui.auth.login.LoginScreen
-import com.example.dacs_3_composer.ui.auth.register.RegisterScreen
-import com.example.dacs_3_composer.ui.user.MainRouteContainerUser
-import com.example.dacs_3_composer.ui.restaurant.MainRouteContainerRestaurant
-import com.example.dacs_3_composer.ui.shipper.MainRouteContainerShipper
-import com.example.dacs_3_composer.ui.theme.DACS_3_ComposerTheme
+import com.example.dacs_3_composer.feature.admin.MainRouteContainerAdmin
+import com.example.dacs_3_composer.feature.auth.AuthViewModel
+import com.example.dacs_3_composer.feature.auth.login.LoginScreen
+import com.example.dacs_3_composer.feature.auth.register.RegisterScreen
+import com.example.dacs_3_composer.feature.customer.MainRouteContainerUser
+import com.example.dacs_3_composer.feature.restaurant.MainRouteContainerRestaurant
+import com.example.dacs_3_composer.feature.shipper.MainRouteContainerShipper
+import com.example.dacs_3_composer.core.designsystem.DACS_3_ComposerTheme
+import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.data.firebase.FirebasePushService
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.gson.JsonObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,6 +47,15 @@ class MainActivity : ComponentActivity() {
                 val authViewModel: AuthViewModel = viewModel()
                 val authState by authViewModel.authState.collectAsState()
                 val context = LocalContext.current
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { }
+                )
+                val requestNotificationPermission = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
                 
                 // Trạng thái điều hướng ban đầu
                 var startDestination by remember { mutableStateOf<String?>(null) }
@@ -50,8 +67,11 @@ class MainActivity : ComponentActivity() {
                     } else {
                         val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                         val savedRole = sharedPrefs.getString("user_role", null)
+                        val savedUid = sharedPrefs.getString("firebase_uid", null)
 
-                        if (savedRole != null) {
+                        if (savedRole != null && savedUid == currentUser.uid) {
+                            FirebasePushService.syncCurrentToken()
+                            requestNotificationPermission()
                             startDestination = when (savedRole) {
                                 "admin" -> "main_admin"
                                 "restaurant" -> "main_restaurant"
@@ -59,22 +79,42 @@ class MainActivity : ComponentActivity() {
                                 else -> "main_user"
                             }
                         } else {
-                            // ✅ TỰ ĐỘNG KHÔI PHỤC ROLE NẾU BỊ MẤT DỮ LIỆU CỤC BỘ
-                            FirebaseFirestore.getInstance().collection("users")
-                                .document(currentUser.uid).get()
-                                .addOnSuccessListener { doc ->
-                                    val role = doc.getString("role") ?: "user"
-                                    sharedPrefs.edit().putString("user_role", role).apply()
-                                    startDestination = when (role) {
-                                        "admin" -> "main_admin"
-                                        "restaurant" -> "main_restaurant"
-                                        "shipper" -> "main_shipper"
-                                        else -> "main_user"
+                            // Ignore a cached role belonging to a different Firebase account.
+                            sharedPrefs.edit().remove("user_role").remove("firebase_uid").apply()
+                            // Khôi phục role từ hồ sơ MySQL; Firebase chỉ cung cấp danh tính.
+                            try {
+                                val result = FoodHubClient.api.get("users", "me")
+                                var role = if (result.isSuccessful) {
+                                    result.body()?.getAsJsonObject("data")?.get("role")?.asString ?: "user"
+                                } else if (result.code() == 404) {
+                                    val payload = JsonObject().apply {
+                                        addProperty("fullName", currentUser.displayName ?: "")
+                                        addProperty("email", currentUser.email ?: "")
+                                        addProperty("avatarUrl", currentUser.photoUrl?.toString() ?: "")
+                                        addProperty("role", "customer")
                                     }
+                                    val created = FoodHubClient.api.create("users", payload)
+                                    if (!created.isSuccessful) error("Không khởi tạo được hồ sơ MySQL")
+                                    created.body()?.getAsJsonObject("data")?.get("role")?.asString ?: "user"
+                                } else error("Không tải được hồ sơ MySQL")
+                                if (role == "seller") role = "restaurant"
+                                if (role == "driver") role = "shipper"
+                                sharedPrefs.edit()
+                                    .putString("user_role", role)
+                                    .putString("firebase_uid", currentUser.uid)
+                                    .apply()
+                                FirebasePushService.syncCurrentToken()
+                                requestNotificationPermission()
+                                startDestination = when (role) {
+                                    "admin" -> "main_admin"
+                                    "restaurant" -> "main_restaurant"
+                                    "shipper" -> "main_shipper"
+                                    else -> "main_user"
                                 }
-                                .addOnFailureListener {
-                                    startDestination = "login"
-                                }
+                            } catch (_: Exception) {
+                                // Không điều hướng nhầm role khi API chưa sẵn sàng.
+                                startDestination = "login"
+                            }
                         }
                     }
                 }
@@ -84,18 +124,22 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(context, authState, Toast.LENGTH_SHORT).show()
                         when (authState) {
                             "Đăng nhập User thành công!" -> {
+                                requestNotificationPermission()
                                 navController.navigate("main_user") { popUpTo("login") { inclusive = true } }
                                 authViewModel.clearAuthState()
                             }
                             "Đăng nhập Restaurant thành công!" -> {
+                                requestNotificationPermission()
                                 navController.navigate("main_restaurant") { popUpTo("login") { inclusive = true } }
                                 authViewModel.clearAuthState()
                             }
                             "Đăng nhập Shipper thành công!" -> {
+                                requestNotificationPermission()
                                 navController.navigate("main_shipper") { popUpTo("login") { inclusive = true } }
                                 authViewModel.clearAuthState()
                             }
                             "Đăng nhập Admin thành công!" -> {
+                                requestNotificationPermission()
                                 navController.navigate("main_admin") { popUpTo("login") { inclusive = true } }
                                 authViewModel.clearAuthState()
                             }

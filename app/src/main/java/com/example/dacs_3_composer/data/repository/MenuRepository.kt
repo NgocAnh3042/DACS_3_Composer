@@ -5,42 +5,25 @@ import android.util.Log
 import com.cloudinary.android.MediaManager
 import com.cloudinary.android.callback.ErrorInfo
 import com.cloudinary.android.callback.UploadCallback
-import com.example.dacs_3_composer.data.model.Dish
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.channels.awaitClose
+import com.example.dacs_3_composer.core.model.Dish
+import com.example.dacs_3_composer.data.remote.FoodHubClient
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class MenuRepository {
-    private val firestore = FirebaseFirestore.getInstance()
-    private val dishCollection = firestore.collection("dishes")
     private val TAG = "MenuRepository"
 
 //    Gọi viewmodel để lấy dữ liệu (callbackFlow lắng nghe nếu tác động thảy đổi để load lại)
-fun getDishes(restaurantId: String): Flow<List<Dish>> = callbackFlow {
-    val subscription = dishCollection
-        .whereEqualTo("restaurantId", restaurantId)
-        .addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                Log.e(TAG, "Lỗi lắng nghe dữ liệu: ${error.message}")
-                close(error)
-                return@addSnapshotListener
-            }
-
-            // 🌟 SỬA ĐOẠN NÀY ĐỂ LẤY ĐƯỢC ID DOCUMENT THẬT
-            val dishes = snapshot?.documents?.mapNotNull { document ->
-                val dish = document.toObject(Dish::class.java)
-                // Bốc cái ID Document thật của Firebase gán vào trường id của Model Dish
-                dish?.copy(id = document.id)
-            } ?: emptyList()
-
-            trySend(dishes)
-        }
-    awaitClose { subscription.remove() }
+fun getDishes(restaurantId: String, includeUnavailable: Boolean = false): Flow<List<Dish>> = flow {
+    while (true) {
+        try { emit(FoodHubClient.list("dishes", mapOf("restaurantId" to restaurantId, "includeUnavailable" to if (includeUnavailable) "1" else "0"))) }
+        catch (e: Exception) { Log.e(TAG, "Không tải được thực đơn MySQL: ${e.message}"); throw e }
+        delay(5_000)
+    }
 }
 //  Xử lý tải ảnh lên
     suspend fun uploadImage(imageUri: Uri, uploadPreset: String): String = suspendCoroutine { continuation ->
@@ -69,24 +52,25 @@ fun getDishes(restaurantId: String): Flow<List<Dish>> = callbackFlow {
         }
     }
 
-    suspend fun addDish(dish: Dish) {
+    suspend fun addDish(dish: Dish): String {
         try {
-            Log.d(TAG, "Đang thêm món vào Firestore: ${dish.name}")
-            dishCollection.add(dish).await()
-            Log.d(TAG, "Thêm món thành công!")
+            val id = FoodHubClient.create("dishes", dish)
+            if (id.isBlank()) error("API đã nhận món nhưng không trả ID MySQL")
+            Log.d(TAG, "Thêm món thành công trên MySQL")
+            return id
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi Firestore addDish: ${e.message}")
+            Log.e(TAG, "Lỗi MySQL addDish: ${e.message}")
             throw e
         }
     }
 
     suspend fun updateDish(dish: Dish) {
         if (dish.id.isNotEmpty()) {
-            dishCollection.document(dish.id).set(dish).await()
+            FoodHubClient.update("dishes", dish.id, dish)
         }
     }
 
     suspend fun deleteDish(dishId: String) {
-        dishCollection.document(dishId).delete().await()
+        FoodHubClient.delete("dishes", dishId)
     }
 }

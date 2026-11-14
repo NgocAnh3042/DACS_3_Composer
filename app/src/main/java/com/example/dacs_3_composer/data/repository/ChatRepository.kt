@@ -1,180 +1,84 @@
 package com.example.dacs_3_composer.data.repository
 
-import android.util.Log
-import com.example.dacs_3_composer.data.model.ChatMessage
-import com.example.dacs_3_composer.data.model.Conversation
-import com.example.dacs_3_composer.data.model.MessageType
+import com.example.dacs_3_composer.core.model.ChatMessage
+import com.example.dacs_3_composer.core.model.Conversation
+import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.tasks.await
+import com.google.firebase.database.FirebaseDatabase
+import com.google.gson.JsonObject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 class ChatRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     private val currentUid get() = auth.currentUser?.uid ?: ""
 
-    /**
-     * Lấy danh sách hội thoại. 
-     * Đối với ADMIN: Lấy tin cá nhân + TOÀN BỘ tin nhắn loại SUPPORT.
-     */
-    fun getConversations(myRole: String = "user"): Flow<List<Conversation>> {
-        if (currentUid.isEmpty()) return flowOf(emptyList())
+    suspend fun createConversation(partnerId: String, partnerRole: String, orderId: String? = null): String {
+        require(currentUid.isNotBlank() && partnerId.isNotBlank()) { "Thiếu tài khoản tham gia chat" }
+        val type = if (partnerRole.equals("shipper", true) || partnerRole.equals("driver", true)) "customer_driver" else "customer_store"
+        val payload = JsonObject().apply {
+            addProperty("type", type)
+            if (!orderId.isNullOrBlank()) addProperty("orderId", orderId)
+            add("participants", com.google.gson.JsonArray().apply { add(currentUid); add(partnerId) })
+        }
+        val response=FoodHubClient.api.create("conversations",payload)
+        if(!response.isSuccessful)error(response.errorBody()?.string() ?: "Không tạo được cuộc trò chuyện")
+        return response.body()?.get("id")?.asString ?: error("API không trả conversation ID")
+    }
 
-        return if (myRole.equals("admin", ignoreCase = true)) {
-            val personalFlow = callbackFlow<List<Conversation>> {
-                val listener = firestore.collection("conversations")
-                    .whereArrayContains("participants", currentUid)
-                    .orderBy("lastMessageTime", Query.Direction.DESCENDING)
-                    .addSnapshotListener { snapshot, error ->
-                        if (error != null) {
-                            Log.e("ChatRepo", "PersonalFlow error: ${error.message}")
-                            trySend(emptyList())
-                        } else {
-                            trySend(snapshot?.toObjects(Conversation::class.java) ?: emptyList())
-                        }
-                    }
-                awaitClose { listener.remove() }
-            }.onStart { emit(emptyList()) }
-
-            val supportFlow = callbackFlow<List<Conversation>> {
-                val listener = firestore.collection("conversations")
-                    .whereEqualTo("type", "SUPPORT")
-                    .addSnapshotListener { snapshot, error ->
-                        if (error != null) {
-                            Log.e("ChatRepo", "SupportFlow error: ${error.message}")
-                            trySend(emptyList())
-                        } else {
-                            trySend(snapshot?.toObjects(Conversation::class.java) ?: emptyList())
-                        }
-                    }
-                awaitClose { listener.remove() }
-            }.onStart { emit(emptyList()) }
-
-            combine(personalFlow, supportFlow) { personal, support ->
-                (personal + support).distinctBy { it.id }
-                    .sortedByDescending { it.lastMessageTime.seconds }
-            }
-        } else {
-            callbackFlow<List<Conversation>> {
-                val listener = firestore.collection("conversations")
-                    .whereArrayContains("participants", currentUid)
-                    .orderBy("lastMessageTime", Query.Direction.DESCENDING)
-                    .addSnapshotListener { snapshot, error ->
-                        if (error != null) trySend(emptyList())
-                        else trySend(snapshot?.toObjects(Conversation::class.java) ?: emptyList())
-                    }
-                awaitClose { listener.remove() }
-            }
+    fun getConversations(myRole: String = "user"): Flow<List<Conversation>> = flow {
+        if (currentUid.isBlank()) { emit(emptyList()); return@flow }
+        while (true) {
+            runCatching { FoodHubClient.list<Conversation>("conversations") }
+                .onSuccess { emit(it) }
+                .onFailure { emit(emptyList()) }
+            delay(3_000)
         }
     }
 
-    fun getMessages(conversationId: String, limit: Long = 50): Flow<List<ChatMessage>> = callbackFlow {
-        if (conversationId.isBlank()) {
-            trySend(emptyList())
-            return@callbackFlow
+    fun getMessages(conversationId: String, limit: Long = 50): Flow<List<ChatMessage>> = flow {
+        if (conversationId.isBlank()) { emit(emptyList()); return@flow }
+        while (true) {
+            runCatching { FoodHubClient.list<ChatMessage>("conversations/$conversationId/messages", mapOf("limit" to limit.toString())) }
+                .onSuccess { emit(it) }
+                .onFailure { emit(emptyList()) }
+            delay(2_000)
         }
-        val listener = firestore.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(limit)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) trySend(emptyList())
-                else {
-                    val messages = snapshot?.toObjects(ChatMessage::class.java) ?: emptyList()
-                    trySend(messages.reversed())
-                }
-            }
-        awaitClose { listener.remove() }
     }
 
     suspend fun sendMessage(convId: String, message: ChatMessage) {
-        val convRef = firestore.collection("conversations").document(convId)
-        val convDoc = convRef.get().await()
-        if (!convDoc.exists()) throw Exception("Hội thoại không tồn tại")
-
-        val batch = firestore.batch()
-        val msgRef = convRef.collection("messages").document()
-        val finalMessage = message.copy(messageId = msgRef.id, senderId = currentUid, delivered = true, createdAt = com.google.firebase.Timestamp.now())
-        batch.set(msgRef, finalMessage)
-
-        val updates = mutableMapOf<String, Any>(
-            "lastMessage" to when(finalMessage.type) {
-                MessageType.IMAGE -> "Đã gửi một ảnh"
-                else -> finalMessage.content
-            },
-            "lastMessageTime" to finalMessage.createdAt,
-            "lastSenderId" to currentUid
-        )
-
-        val participants = (convDoc.get("participants") as? List<*>)?.filterIsInstance<String>()?.toMutableList() ?: mutableListOf()
-        val rawRoles = convDoc.get("participantRoles") as? Map<*, *>
-        val participantRoles = rawRoles?.map { it.key.toString() to it.value.toString() }?.toMap()?.toMutableMap() ?: mutableMapOf()
-
-        if (!participants.contains(currentUid)) {
-            participants.add(currentUid)
-            val myUserDoc = firestore.collection("users").document(currentUid).get().await()
-            participantRoles[currentUid] = myUserDoc.getString("role") ?: "admin"
-            updates["participants"] = participants
-            updates["participantRoles"] = participantRoles
-        }
-
-        participants.forEach { uid ->
-            if (uid != currentUid) updates["unreadCount.$uid"] = FieldValue.increment(1)
-        }
-        batch.update(convRef, updates)
-        batch.commit().await()
+        require(currentUid.isNotBlank()) { "Chưa đăng nhập" }
+        val payload = message.copy(messageId = "", senderId = currentUid, delivered = true)
+        val response = FoodHubClient.api.create("conversations/$convId/messages", FoodHubClient.gson.toJsonTree(payload).asJsonObject)
+        if (!response.isSuccessful) error(response.errorBody()?.string() ?: "Không gửi được tin nhắn")
     }
 
     suspend fun markAsSeen(convId: String) {
-        if (currentUid.isEmpty() || convId.isBlank()) return
-        try {
-            firestore.collection("conversations").document(convId).update("unreadCount.$currentUid", 0)
-            val snapshot = firestore.collection("conversations").document(convId).collection("messages")
-                .orderBy("createdAt", Query.Direction.DESCENDING).limit(20).get().await()
-            if (!snapshot.isEmpty) {
-                val batch = firestore.batch()
-                var hasUpdates = false
-                snapshot.documents.forEach { doc ->
-                    val senderId = doc.getString("senderId")
-                    if (senderId != currentUid && doc.getBoolean("seen") == false) {
-                        batch.update(doc.reference, "seen", true)
-                        hasUpdates = true
-                    }
-                }
-                if (hasUpdates) batch.commit().await()
-            }
-        } catch (e: Exception) { Log.e("ChatRepo", "MarkSeen Error: ${e.message}") }
+        if (currentUid.isBlank() || convId.isBlank()) return
+        val payload = JsonObject().apply { addProperty("action", "read") }
+        val response = FoodHubClient.api.create("conversations/$convId/messages", payload)
+        if (!response.isSuccessful) error(response.errorBody()?.string() ?: "Không cập nhật trạng thái đã đọc")
     }
 
     fun setTypingStatus(convId: String, isTyping: Boolean) {
-        if (currentUid.isEmpty() || convId.isBlank()) return
-        firestore.collection("conversations").document(convId).update("typing.$currentUid", isTyping)
+        if (currentUid.isBlank() || convId.isBlank()) return
+        FirebaseDatabase.getInstance().getReference("chat").child(convId).child("typing").child(currentUid).setValue(isTyping)
     }
 
     suspend fun contactSupport(myRole: String): String {
-        val existing = firestore.collection("conversations")
-            .whereEqualTo("type", "SUPPORT")
-            .whereArrayContains("participants", currentUid)
-            .get().await()
-        if (!existing.isEmpty) return existing.documents[0].id
-
-        val newDoc = firestore.collection("conversations").document()
-        val conversation = Conversation(
-            id = newDoc.id,
-            participants = listOf(currentUid), 
-            participantRoles = mapOf(currentUid to myRole.lowercase()),
-            type = "SUPPORT",
-            createdAt = com.google.firebase.Timestamp.now(),
-            lastMessageTime = com.google.firebase.Timestamp.now(),
-            lastMessage = "Yêu cầu hỗ trợ mới"
-        )
-        newDoc.set(conversation).await()
-        return newDoc.id
+        val existing = FoodHubClient.list<Conversation>("conversations").firstOrNull {
+            it.type.equals("SUPPORT", ignoreCase = true) && currentUid in it.participants
+        }
+        if (existing != null) return existing.id
+        val payload = JsonObject().apply {
+            addProperty("type", "support")
+            add("participants", com.google.gson.JsonArray().apply { add(currentUid) })
+            addProperty("requesterRole", myRole.lowercase())
+        }
+        val response = FoodHubClient.api.create("conversations", payload)
+        if (!response.isSuccessful) error(response.errorBody()?.string() ?: "Không tạo được cuộc trò chuyện")
+        return response.body()?.get("id")?.asString ?: error("API không trả conversation ID")
     }
 }

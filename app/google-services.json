@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "963036038937",
-    "project_id": "dacs-3-composer",
-    "storage_bucket": "dacs-3-composer.firebasestorage.app"
+    "project_number": "948126651845",
+    "project_id": "dacs3-anchin-go",
+    "storage_bucket": "dacs3-anchin-go.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:963036038937:android:4ecff6d2415a6c35dea788",
+        "mobilesdk_app_id": "1:948126651845:android:501bfdfe6588e402f2a7ac",
         "android_client_info": {
           "package_name": "com.example.dacs_3_composer"
         }
       },
       "oauth_client": [
         {
-          "client_id": "963036038937-uepffeugno9rpes199g0pu11qi2d1uq9.apps.googleusercontent.com",
+          "client_id": "948126651845-fapcheh8juo2j1of3c963ogdrvsl3fiu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.dacs_3_composer",
-            "certificate_hash": "aa61e566895053edcc3aeb7a7a6944697a419464"
+            "certificate_hash": "b3e08e5bb0af5c0072781ccf5ae244c259575557"
           }
         },
         {
-          "client_id": "963036038937-oc3omdisdodgmdfoqn24ko5keeat5tsi.apps.googleusercontent.com",
+          "client_id": "948126651845-4npaa2mealpo7n5on7i4k8dugevr7vdl.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAmbuCKViACySvh-W-IRfwCqfKT8CeGBeM"
+          "current_key": "AIzaSyAHEkYZG6iOSUZvrCKsMJcyYvHPLq4fb7I"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "963036038937-oc3omdisdodgmdfoqn24ko5keeat5tsi.apps.googleusercontent.com",
+              "client_id": "948126651845-4npaa2mealpo7n5on7i4k8dugevr7vdl.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
