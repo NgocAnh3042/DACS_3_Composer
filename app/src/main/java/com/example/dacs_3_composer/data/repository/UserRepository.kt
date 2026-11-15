@@ -1,8 +1,8 @@
 package com.example.dacs_3_composer.data.repository
 
-import com.example.dacs_3_composer.data.model.User
+import com.example.dacs_3_composer.core.model.User
+import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -16,7 +16,6 @@ import java.io.File
 
 class UserRepository {
 
-    private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
     suspend fun getCurrentUser(): User {
@@ -25,24 +24,15 @@ class UserRepository {
     }
 
     suspend fun getUserById(uid: String): User {
-        val snapshot = db.collection("users").document(uid).get().await()
-        val user = snapshot.toObject(User::class.java) ?: throw Exception("Không tìm thấy người dùng")
-        return user.copy(uid = uid)
+        val firebaseUid = auth.currentUser?.uid
+        val user = if (uid == firebaseUid) FoodHubClient.get<User>("users", "me")
+        else FoodHubClient.get<User>("users", uid)
+        return user.copy(uid = user.uid.ifBlank { uid })
     }
 
     suspend fun updateProfile(user: User) {
-        val updateMap = mapOf(
-            "name" to user.name,
-            "phone" to user.phone,
-            "address" to user.address,
-            "vehicleName" to user.vehicleName,
-            "avatarUrl" to user.avatarUrl
-        )
-
-        db.collection("users")
-            .document(user.uid)
-            .update(updateMap)
-            .await()
+        val id = if (user.uid == auth.currentUser?.uid) "me" else user.uid
+        FoodHubClient.update("users", id, user)
     }
 
     suspend fun uploadAvatar(
