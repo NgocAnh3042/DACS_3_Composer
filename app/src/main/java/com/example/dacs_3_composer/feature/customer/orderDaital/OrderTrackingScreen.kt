@@ -1,5 +1,8 @@
 package com.example.dacs_3_composer.feature.customer.orderDaital
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -35,8 +38,9 @@ fun OrderTrackingScreen(
     val scrollState = rememberScrollState()
 
     // Kích hoạt lắng nghe dữ liệu từ Firebase khi màn hình mở lên
-    LaunchedEffect(orderId) {
-        orderViewModel.observeOrderDetails(orderId)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, orderId) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { orderViewModel.observeOrderDetails(orderId) }
     }
 
     // Thu thập dữ liệu đơn hàng thời gian thực

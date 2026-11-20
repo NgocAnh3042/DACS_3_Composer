@@ -21,7 +21,7 @@
         android:roundIcon="@drawable/images3"
         android:supportsRtl="true"
         android:theme="@style/Theme.DACS_3_Composer"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"> <!-- ✅ Thêm dòng này -->
 
         <service

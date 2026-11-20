@@ -47,7 +47,8 @@ data class Order(
 
     var shipperId: String = "",
     var items: List<OrderItem> = emptyList(),
-    var completedAt: String? = null
+    var completedAt: String? = null,
+    var restaurantCoverImage: String = ""
 ) {
     constructor() : this(
         id = "", time = "", status = "PENDING", paymentMethod = "CASH", isPaid = false,

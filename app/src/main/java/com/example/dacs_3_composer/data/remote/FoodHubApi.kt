@@ -13,9 +13,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
-import okhttp3.Interceptor
 import okhttp3.OkHttpClient
-import okhttp3.Response as OkHttpResponse
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -57,17 +55,12 @@ object FoodHubClient {
             }
         }).create()
     val api: FoodHubApi by lazy {
-        val authInterceptor = Interceptor { chain ->
-            val token = FirebaseAuth.getInstance().currentUser?.let { user ->
-                val idToken = Tasks.await(user.getIdToken(false)).token
+        val authInterceptor = FirebaseAuthInterceptor {
+            FirebaseAuth.getInstance().currentUser?.let { user ->
+                val idToken = Tasks.await(user.getIdToken(false), 15, TimeUnit.SECONDS).token
                 if (idToken.isNullOrBlank()) throw IOException("Firebase không trả về ID token cho tài khoản hiện tại")
                 idToken
             }
-            val request = chain.request().newBuilder().apply {
-                if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
-                header("Accept", "application/json")
-            }.build()
-            chain.proceed(request)
         }
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)

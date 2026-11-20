@@ -61,9 +61,10 @@ fun MainRouteContainerShipper(
             && currentRoute?.startsWith("chat_detail") != true
 
     Scaffold(
+        floatingActionButton = { if (currentRoute == NavigationShipper.Dashboard.route) androidx.compose.material3.ExtendedFloatingActionButton(onClick = { navController.navigate("foodhub_support") }) { androidx.compose.material3.Text("Trợ lý FoodHub") } },
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
-            if (shouldShowBottomBar) {
+            if (shouldShowBottomBar && currentRoute != "foodhub_support") {
                 NavigationBar(
                     modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                     containerColor = Color.White,
@@ -106,6 +107,10 @@ fun MainRouteContainerShipper(
             startDestination = NavigationShipper.Dashboard.route,
             modifier = Modifier.padding(paddingValues)
         ) {
+            composable("foodhub_support") {
+                com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
+                    onBack = { navController.popBackStack() }, onOpenRestaurant = {}, staff = true)
+            }
             composable(NavigationShipper.Dashboard.route) {
                 ShipperDashboardScreen(
                     onOrderClick = { id -> navController.navigate("shipper_order_detail/$id") },

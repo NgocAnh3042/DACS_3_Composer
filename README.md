@@ -4,7 +4,7 @@ FoodHub là dự án Android đang phát triển, gồm bốn vai trò: khách h
 
 Dữ liệu nghiệp vụ đi qua **API PHP trên Alwaysdata** để lưu trong database **`food_delivery_app` trên TiDB Cloud** qua kết nối MySQL có TLS. Firebase Authentication xử lý danh tính đăng nhập; Firebase Cloud Messaging gửi thông báo; Realtime Database giữ dữ liệu phiên và tọa độ trực tiếp; Cloudinary lưu ảnh.
 
-> Ngày **14/11/2026**, database chuyển sang TiDB Cloud (32 bảng, 27 cột ID tự tăng) và API đã online trên **Alwaysdata**. Mã Android đã đổi URL; app cũ trên điện thoại cần build/cài bản mới. XAMPP/ngrok không còn cần cho API online. Các database cũ vẫn giữ để đối chiếu.
+> Ngày **14/11/2026**, database chuyển sang TiDB Cloud (32 bảng, 27 cột ID tự tăng) và API đã online trên **Alwaysdata**. Mã Android đã đổi URL; app cũ trên điện thoại cần build/cài bản mới. Các database cũ vẫn giữ để đối chiếu.
 
 ## Đọc tài liệu
 
@@ -15,8 +15,9 @@ Dữ liệu nghiệp vụ đi qua **API PHP trên Alwaysdata** để lưu trong 
 | [Luồng xử lý](docs/WORKFLOWS.md) | Đăng nhập, đặt hàng, thanh toán, giao hàng, địa chỉ, ảnh và chat |
 | [Database](docs/DATABASE.md) | 32 bảng, quan hệ, quy ước ID và các trường nghiệp vụ quan trọng |
 | [API](docs/API.md) | Endpoint hiện có, dữ liệu trả về, xác thực và phạm vi quyền |
-| [Chạy local và xử lý lỗi](docs/LOCAL_SETUP.md) | Android Studio, XAMPP, ngrok, Firebase, PayOS, kiểm tra |
+| [Chạy local và xử lý lỗi](docs/LOCAL_SETUP.md) | Android Studio, Alwaysdata, TiDB, Firebase, PayOS, kiểm tra |
 | [Triển khai Alwaysdata](docs/ALWAYSDATA.md) | Hosting đang dùng, cách triển khai, cấu hình và kiểm tra |
+| [Tư vấn món bằng Gemini](docs/AI_MEAL_ADVISOR.md) | Giai đoạn 1, cấu hình khóa riêng, API và triển khai |
 | [Hướng dẫn cho coding agent](AGENTS.md) | Quyết định đã thống nhất và đường dẫn cần đọc |
 
 ## Cấu trúc chính
@@ -46,9 +47,9 @@ docs/                      Tài liệu dự án
 ## Bắt đầu nhanh
 
 1. Mở **thư mục gốc dự án** bằng Android Studio.
-2. Kiểm tra [API online](https://chinh.alwaysdata.net/food-delivery-api/api/), cần nhận `database: connected`. Không cần bật XAMPP/ngrok trên máy.
-3. `FoodHubClient.BASE_URL` hiện trỏ Alwaysdata; không đổi về ngrok khi chạy bình thường.
+2. Kiểm tra [API online](https://chinh.alwaysdata.net/food-delivery-api/api/), cần nhận `database: connected`.
+3. `FoodHubClient.BASE_URL` hiện trỏ Alwaysdata..
 4. Build/cài bản app mới để dùng URL mới; ứng dụng cũ chưa tự đổi endpoint.
 5. Tài khoản admin thử là `admin@gmail.com`, sử dụng mật khẩu đã được cung cấp trong cuộc trao đổi tạo tài khoản.
 
-Chi tiết cấu hình nằm trong [LOCAL_SETUP.md](docs/LOCAL_SETUP.md). Thư mục Android không cần chuyển vào `htdocs`.
+Chi tiết cấu hình nằm trong [LOCAL_SETUP.md](docs/LOCAL_SETUP.md).
