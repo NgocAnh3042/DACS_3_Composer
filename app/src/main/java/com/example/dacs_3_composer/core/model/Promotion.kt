@@ -15,5 +15,6 @@ data class Promotion(
     val endDate: Timestamp? = null,
     val description: String = "",
     val title: String = "",
-    val status: String = "active" // "active", "expired"
+    val status: String = "active", // "active", "expired"
+    val imageUrl: String = ""
 )

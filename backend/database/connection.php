@@ -19,30 +19,35 @@ function foodhubDatabaseOptions(array $mysql): array {
     return $options;
 }
 
-function foodhubConnectDatabase(array $mysql): PDO {
+function foodhubConnectDatabase(array $mysql, bool $reuseForRead = false): PDO {
     $host = (string)$mysql['host'];
     $port = (int)$mysql['port'];
     $database = (string)$mysql['database'];
     $charset = (string)($mysql['charset'] ?? 'utf8mb4');
-    $pdo = new PDO(
-        "mysql:host=$host;port=$port;dbname=$database;charset=$charset",
-        (string)$mysql['username'],
-        (string)$mysql['password'],
-        foodhubDatabaseOptions($mysql)
-    );
-    if (!empty($mysql['ssl']['required'])) {
-        $status = $pdo->query("SHOW SESSION STATUS LIKE 'Ssl_cipher'")->fetch();
-        if (empty($status['Value'])) {
-            throw new RuntimeException('Database không thiết lập được kết nối TLS.');
-        }
-    }
-    // Fixed offset avoids depending on timezone tables installed on the server.
+    $options = foodhubDatabaseOptions($mysql);
     if (isset($mysql['timezone'])) {
         $timezone = (string)$mysql['timezone'];
         if (!preg_match('/^[+-](?:0[0-9]|1[0-3]):[0-5][0-9]$/D', $timezone)) {
             throw new RuntimeException('Múi giờ database phải là độ lệch dạng +07:00.');
         }
-        $pdo->exec('SET SESSION time_zone = '.$pdo->quote($timezone));
+        $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET SESSION time_zone = '$timezone'";
+    }
+    if ($reuseForRead) {
+        // A separate per-worker pool for GETs. Writes and transactions use fresh connections.
+        $options[PDO::ATTR_PERSISTENT] = 'foodhub-read-'.hash('sha256',serialize($options));
+    }
+    $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=$charset";
+    $pdo = new PDO($dsn, (string)$mysql['username'], (string)$mysql['password'], $options);
+    if (!empty($mysql['ssl']['required'])) {
+        try {
+            $status = $pdo->query("SHOW SESSION STATUS LIKE 'Ssl_cipher'")->fetch();
+        } catch (PDOException $error) {
+            if (!$reuseForRead || !in_array((int)($error->errorInfo[1] ?? 0), [2006,2013], true)) throw $error;
+            return foodhubConnectDatabase($mysql);
+        }
+        if (empty($status['Value'])) {
+            throw new RuntimeException('Database không thiết lập được kết nối TLS.');
+        }
     }
     return $pdo;
 }

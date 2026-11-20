@@ -48,7 +48,7 @@ Các phiên bản trên là **khai báo nguồn**. Một số thư viện đư�
 
 ## 3. Backend và database
 
-- PHP online chạy trên Alwaysdata (CLI đã kiểm tra 8.4.27), sử dụng PDO MySQL, OpenSSL, JSON và cURL/HTTPS streams. XAMPP là bản local dự phòng.
+- PHP online chạy trên Alwaysdata (CLI đã kiểm tra 8.4.27), sử dụng PDO MySQL, OpenSSL, JSON và cURL/HTTPS streams.
 - API chính `https://chinh.alwaysdata.net/food-delivery-api/api/`; public `/home/chinh/www/food-delivery-api`, config/service account/CA/cache ngoài web tại `/home/chinh/private/foodhub`. PHP timezone Asia/Ho_Chi_Minh, session database +07:00.
 - API hiện tập trung trong `backend/api/index.php`; chưa phải Laravel hoặc một backend tách service/controller đầy đủ.
 - Database đang dùng: TiDB Cloud `8.0.11-TiDB-v8.5.3-serverless`, **`food_delivery_app`**, 32 bảng; TLS xác minh bằng ISRG Root X1 và session timezone `+07:00`. `backend/database/connection.php` dùng chung cho API và công cụ kiểm tra CLI.

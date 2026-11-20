@@ -1,5 +1,8 @@
 package com.example.dacs_3_composer.feature.customer.order
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -39,6 +42,10 @@ fun OrderScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
 
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, orderViewModel) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { orderViewModel.observeUserOrders() }
+    }
     val ongoingOrders by orderViewModel.ongoingOrders.collectAsState()
     val historyOrders by orderViewModel.historyOrders.collectAsState()
     val isLoading by orderViewModel.isLoading.collectAsState()
@@ -93,7 +100,7 @@ fun OrderScreen(
                                 } else {
                                     items(pendingOrders) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
-                                        val imgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
+                                        val imgUrl = order.restaurantCoverImage
                                         val currentStatus = order.status.uppercase().trim()
 
                                         Card(
@@ -165,7 +172,7 @@ fun OrderScreen(
                                 } else {
                                     items(activeOrders) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
-                                        val imgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
+                                        val imgUrl = order.restaurantCoverImage
                                         val currentStatus = order.status.uppercase().trim()
                                         
                                         Card(
@@ -216,7 +223,7 @@ fun OrderScreen(
                                         val historyItemsSummary = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val s = order.status.uppercase().trim()
                                         val displayStatus = if (s == "CANCELLED") " - đã bị hủy" else " - đã được giao thành công"
-                                        val historyImgUrl = orderViewModel.restaurantImages[order.restaurantId] ?: ""
+                                        val historyImgUrl = order.restaurantCoverImage
                                         val localeVi = Locale.forLanguageTag("vi-VN")
                                         val dinhDangGia = String.format(localeVi, "%,.0f đ", order.totalPrice)
 

@@ -54,6 +54,16 @@ android {
     }
 }
 
+// Compile against the versions packaged in each APK, including debug-only Compose dependencies.
+// Otherwise UI tooling can raise runtime foundation while source still compiles against an old ABI.
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.components.forEach { component ->
+            component.compileConfiguration.shouldResolveConsistentlyWith(component.runtimeConfiguration)
+        }
+    }
+}
+
 dependencies {
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

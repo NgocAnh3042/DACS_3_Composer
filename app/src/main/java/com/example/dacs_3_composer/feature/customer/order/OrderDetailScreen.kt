@@ -1,5 +1,8 @@
 package com.example.dacs_3_composer.feature.customer.order
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -39,8 +42,9 @@ fun OrderDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val chatScope = rememberCoroutineScope()
-    LaunchedEffect(orderId) {
-        orderViewModel.observeOrderDetails(orderId)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, orderId) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { orderViewModel.observeOrderDetails(orderId) }
     }
 
     val orderState by orderViewModel.currentTrackingOrder.collectAsState()

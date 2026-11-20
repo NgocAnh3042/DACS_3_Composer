@@ -1,5 +1,9 @@
 # Triển khai API lên Alwaysdata
 
+**Khôi phục kết nối 16/11/2026:** sau khi người dùng đổi mật khẩu TiDB, backend bị 1045/health 503. Đã kiểm tra mật khẩu mới và chỉ cập nhật mysql.password trong cấu hình private, giữ các giá trị khác; backup `/home/chinh/private/foodhub/backups/password-20261116-064356`. Health và các API đọc có Firebase token đều đạt. Cấu hình local/runtime trong checkout hiện thiếu, cần chuẩn bị lại cấu hình riêng trước khi tạo full bundle; không triển khai bundle cũ đè mật khẩu hosting mới. Xem SESSION_HANDOFF.
+
+**Bổ sung 15/11/2026:** tính năng tư vấn món đã được người dùng cho phép và triển khai có chọn lọc (router + hai helper AI), giữ nguyên DB/PayOS/Firebase. Khóa Gemini riêng ở private/config.gemini.local.php, model `gemini-4-hydrogen`, HTTP chặn wrapper 403. Backup cuối `/home/chinh/private/foodhub/backups/meal-advisor-20261115-143608`; lint/checksum đạt. Google nhận khóa/model nhưng generateContent đang gặp high demand/timeout; chưa xác nhận lượt tư vấn thật thành công. Xem AI_MEAL_ADVISOR và SESSION_HANDOFF.
+
 Trạng thái ngày 14/11/2026: **đã triển khai API, xác nhận PayOS webhook và đổi URL trong mã Android sang Alwaysdata**. Người dùng đã sửa mật khẩu SSH sau lần từ chối đầu; kết nối xác minh đúng fingerprint và đăng nhập thành công. App cũ trên điện thoại cần build/cài bản mới để dùng URL mới.
 
 ## Thông tin triển khai

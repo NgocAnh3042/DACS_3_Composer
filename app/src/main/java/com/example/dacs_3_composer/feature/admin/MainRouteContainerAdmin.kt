@@ -61,9 +61,10 @@ private fun AdminRouteContent(
     )
 
     Scaffold(
+        floatingActionButton = { if (route == NavigationAdmin.Overview.route) androidx.compose.material3.ExtendedFloatingActionButton(onClick = { navController.navigate("foodhub_support") }) { androidx.compose.material3.Text("Trợ lý FoodHub") } },
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
-            if (route != "admin_messages" && route?.startsWith("admin_chat/") != true) {
+            if (route != "foodhub_support" && route != "admin_messages" && route?.startsWith("admin_chat/") != true) {
             NavigationBar(
                 modifier = Modifier
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
@@ -108,6 +109,10 @@ private fun AdminRouteContent(
             modifier = Modifier.padding(paddingValues)
         ) {
             // Tab 1: Báo cáo & Thống kê
+            composable("foodhub_support") {
+                com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
+                    onBack = { navController.popBackStack() }, onOpenRestaurant = {}, staff = true)
+            }
             composable(NavigationAdmin.Overview.route) {
                 AdminAnalyticsScreen(
                     onNavigateToChat = { navController.navigate("admin_messages") },

@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS dish_option_groups (
 
 CREATE TABLE IF NOT EXISTS vouchers (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, store_id BIGINT UNSIGNED NULL,
-  code VARCHAR(64) NOT NULL, title VARCHAR(180) NOT NULL, description TEXT NULL,
+  code VARCHAR(64) NOT NULL, title VARCHAR(180) NOT NULL, description TEXT NULL, image_url VARCHAR(1500) NULL,
   discount_type ENUM('percentage','fixed','free_shipping') NOT NULL,
   discount_value DECIMAL(12,2) NOT NULL, max_discount DECIMAL(12,2) NULL,
   min_order_amount DECIMAL(12,2) NOT NULL DEFAULT 0, usage_limit INT UNSIGNED NULL,

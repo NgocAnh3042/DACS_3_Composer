@@ -20,10 +20,10 @@ import java.util.Locale
 
 //          Vẽ giao diện có colum bao quanh có ảnh tên..vv
 @Composable
-fun DeliciousDishItem(dish: Dish, onClick: () -> Unit) {
+fun DeliciousDishItem(dish: Dish, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .width(176.dp)
+        modifier = modifier
+            .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -37,7 +37,7 @@ fun DeliciousDishItem(dish: Dish, onClick: () -> Unit) {
                 error = painterResource(id = R.drawable.food_pho_v2),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(136.dp)
+                    .aspectRatio(1.4f)
                     .clip(RoundedCornerShape(16.dp)),
                 contentScale = ContentScale.Crop
             )

@@ -110,7 +110,7 @@ flowchart LR
 5. Webhook tới `/payos/webhook` không có Firebase Bearer token, được kiểm tra bằng HMAC với checksum key và đối chiếu số tiền.
 6. Backend có mã cập nhật `payments`, `orders`, `payment_webhook_events`, rồi thông báo. Android polling đơn để đọc trạng thái.
 
-**Trạng thái kiểm tra:** webhook đã có implementation và URL ngrok đã được cấu hình trước đó. Tuy nhiên có lỗi tĩnh ở phần lấy số hàng UPDATE, ghi rõ trong `SESSION_HANDOFF.md`; chưa coi PayOS end-to-end là đã được xác nhận ở phiên tạo tài liệu.
+Webhook PayOS dùng URL Alwaysdata ghi trong ALWAYSDATA.md. Kiểm thử giao dịch tiền thật được theo dõi riêng.
 
 ## 8. Chat, ảnh và thông báo
 

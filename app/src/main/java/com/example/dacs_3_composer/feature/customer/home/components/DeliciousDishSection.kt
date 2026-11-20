@@ -1,65 +1,35 @@
 package com.example.dacs_3_composer.feature.customer.home.components
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
-import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
-import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
+import com.example.dacs_3_composer.core.model.Dish
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeliciousDishSection(
-    navController: NavController,
-    viewModel: HomeViewModel = viewModel(),
-    cartViewModel: CartViewModel = viewModel() // 🌟 TÍCH HỢP: Nhận CartViewModel từ HomeScreen truyền xuống
-) {
-    val allListDishes by viewModel.deliciousDishes.collectAsState()
-    val row1Dishes = allListDishes
-
-    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Món ngon cho bạn",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Xem tất cả",
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 12.dp)
-        ) {
-            items(row1Dishes) { dish ->
-                DeliciousDishItem(dish = dish, onClick = {
-                    // 🎯 ĐỒNG BỘ DỮ LIỆU: Lưu vết ID nhà hàng của món ăn này vào hệ thống Giỏ hàng
-                    cartViewModel.currentRestaurantId = dish.restaurantId
-                    cartViewModel.currentRestaurantName = "Nhà hàng đối tác" // Tạm gán mặc định nếu cấu trúc Dish chưa lưu kèm chuỗi tên Quán
-
-                    // Chuyển màn hình và đưa id nhà hàng
-                    navController.navigate("restaurant_detail/${dish.restaurantId}")
-                })
+fun AllDishesScreen(dishes: List<Dish>, loading: Boolean, failed: Boolean, onRetry: () -> Unit, onBack: () -> Unit, onDish: (Dish) -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text("Tất cả món ăn") }, windowInsets = WindowInsets(0), navigationIcon = {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại") }
+        })
+        if (dishes.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                when {
+                    loading -> CircularProgressIndicator()
+                    failed -> TextButton(onClick = onRetry) { Text("Chưa tải được món · Thử lại") }
+                    else -> Text("Chưa có món ăn.")
+                }
             }
+        } else LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(dishes, key = { it.id }) { dish -> DeliciousDishItem(dish, onClick = { onDish(dish) }) }
         }
     }
 }
