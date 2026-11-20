@@ -11,15 +11,23 @@ try{
     $input=MealAdvisor::validate(body());
     $fee=max(0,(float)($config['delivery_fee']??15000));
     $personal=$me['role']==='customer' && preg_match('/\b(goi y|tu van|chon)\b.*\b(lich su|tung dat|hay dat)\b/',MealAdvisor::folded($input['message']));
+    $supportHumanized=false;
     $support=$personal?null:FoodHubSupport::reply($pdo,$me,$input,$fee,static function(string $question,string $previous) use ($base,$uid): string {
         try {
             MealAdvisor::takeQuota(foodhubCacheFile('meal-quota-'.hash('sha256',$uid).'.json'),time());
             return (new MealAdvisor(MealAdvisor::groqSettings($base)))->supportTopic($question,$previous);
         } catch (MealAdvisorException $e) { return 'clarify'; }
+    }, static function(string $message, array $history, array $facts, string $fallback) use ($base,$uid,&$supportHumanized): string {
+        try {
+            MealAdvisor::takeQuota(foodhubCacheFile('meal-quota-'.hash('sha256',$uid).'.json'),time());
+            $human=(new MealAdvisor(MealAdvisor::groqSettings($base)))->humanizeSupport($message,$history,$facts,$fallback);
+            if ($human!==$fallback) $supportHumanized=true;
+            return $human;
+        } catch (Throwable $e) { return $fallback; }
     });
     if ($support!==null) out(200,['data'=>['message'=>trim($support),'preferences'=>'','budget'=>$input['budget'],
         'budgetScope'=>$input['budgetScope'],'deliveryFee'=>$fee,'catalogLimited'=>false,'recommendations'=>[],
-        'source'=>'support','kind'=>'support','hasMore'=>false]]);
+        'source'=>$supportHumanized?'groq':'support','kind'=>'support','hasMore'=>false]]);
     $intentInput=array_replace($input,['message'=>MenuKnowledge::mealQuestion($input)]);
     $intent=MealAdvisor::localIntent($intentInput);
     if (preg_match('/\b(gom|ca|kem|tinh ca|bao gom) (phi (giao( hang)?|ship)|ship)\b/',MenuKnowledge::text($intentInput['message']))) $input['budgetScope']='total';

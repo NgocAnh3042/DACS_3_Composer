@@ -1,6 +1,32 @@
 # Bàn giao phiên làm việc — FoodHub
 
-Cập nhật **19/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+Cập nhật **20/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+
+## Voucher theo mẫu HTML
+
+Banner Compose dùng gradient, chiều cao tối thiểu 240dp, bo góc 24dp, chữ phía trái và ảnh lớn xoay 12 độ, tràn góc dưới phải. Tạo mới đúng bốn ảnh nền trong suốt bánh mì, cơm tấm, trà sữa, bún bò. Ảnh thứ năm dùng nguyên ảnh pizza trong HTML người dùng cung cấp. Tệp gốc nằm ở backend/assets/vouchers. Ảnh dùng cho mã miễn phí giao FHPHOSHIP, đổi tiêu đề thành Giao ngon tận nhà. Mức giảm, hạn dùng và lượt sử dụng giữ theo các voucher đã tạo. APK build/deliverables/FoodHub-Voucher-Hero-debug.apk đã build và unit test đạt. Chưa cài lên điện thoại vì ADB không có thiết bị kết nối trong lần kiểm tra này.
+
+## Nâng cấp Trợ lý CSKH FoodHub như người thật (10 Yếu Tố) — 20/11/2026
+
+- **Hoàn thiện kiến trúc 10 yếu tố cho Groq AI Assistant**:
+  1. Giao tiếp tự nhiên tiếng Việt đời thường, xưng hô em - anh/chị, tự thích ứng cách xưng hô, hiểu viết tắt (tui, shp, đh, ko, nãy, 80k), bỏ qua lỗi telex/chính tả.
+  2. Tra cứu đơn hàng trên TiDB, giải thích minh bạch khi chưa có ETA chính xác, chống ảo giác (anti-hallucination) không bịa số phút đến nơi.
+  3. Tư vấn món ăn thông minh theo ngân sách, sở thích cay/no bụng/món nước/chay và an toàn dị ứng thực phẩm.
+  4. Tiếp nhận khiếu nại (đổ thức ăn, sai món, thiếu món), hỏi ảnh bằng chứng và hướng dẫn tạo phiếu hỗ trợ.
+  5. Quy trình thanh toán, voucher, phí vận chuyển và hoàn tiền; chốt an toàn nghiêm ngặt: chỉ thông báo hoàn tiền thành công khi hệ thống ghi nhận `payments.status === 'refunded'`.
+  6. Phát hiện cảm xúc khách hàng (angry, anxious, frustrated, urgent, satisfied, neutral); kỹ năng xoa dịu (de-escalation) đồng cảm 1 câu ngắn gọn, không lặp lại lời xin lỗi, tập trung ngay vào giải pháp.
+  7. Phân quyền dữ liệu theo vai trò (Customer chỉ xem đơn của mình, Seller xem quán mình, Shipper xem đơn được gán, Admin xem toàn hệ thống).
+  8. Ghi nhớ ngữ cảnh đa lượt: tự động trích xuất mã đơn và món ăn từ các lượt chat trước (ví dụ "Vậy hủy giúp mình đi").
+  9. Chuyển tiếp nhân viên thật (Human Handoff): tạo ticket trong `conversations` (type='support'), tóm tắt nội dung cho Admin xử lý qua Tin nhắn.
+  10. Thu thập đánh giá (Hữu ích / Chưa giải quyết), đưa vào hàng đợi kiểm duyệt, tuyệt đối không tự học dữ liệu chưa duyệt.
+- **Backend**:
+  - `MealAdvisor.php`: Bổ sung hàm `humanizeSupport()` tích hợp Master System Prompt CSKH và chốt an toàn (actionRequired, refund guardrail, ETA guardrail).
+  - `FoodHubSupport.php`: Bổ sung `detectEmotion()` và cơ chế `dispatch()` truyền gói sự thật (facts) đã xác thực vào Groq.
+  - `meal-advisor-route.php`: Kết nối luồng humanize vào API route với hạn mức quota và fallback an toàn.
+- **Tài liệu & Dữ liệu huấn luyện**:
+  - `docs/AI_TRAINING_DATASET.jsonl`: Bộ dữ liệu mẫu chuẩn OpenAI/Groq Chat format cho 10 kịch bản thực tế.
+  - `docs/AI_ASSISTANT_TRAINING.md`: Bản hướng dẫn chi tiết kiến trúc, Master System Prompt và quy trình Fine-tuning LLaMA qua Unsloth/Hugging Face.
+- **Kiểm thử**: Toàn bộ kiểm thử PHP đạt (`foodhub_support_test.php`, `foodhub_human_ai_test.php`, `meal_chat_test.php`, `meal_advisor_fast_test.php`, `menu_knowledge_test.php`).
 
 ## Voucher có ảnh trên trang chủ
 
