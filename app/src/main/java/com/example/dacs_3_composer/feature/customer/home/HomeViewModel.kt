@@ -26,10 +26,19 @@ class HomeViewModel : ViewModel() {
     private val _deliciousDishes = MutableStateFlow<List<Dish>>(emptyList())
     val deliciousDishes: StateFlow<List<Dish>> = _deliciousDishes.asStateFlow()
 
-    init {
-        loadUserData() // 🌟 Cho chạy ngay từ đầu để thông tin cá nhân nạp nhanh hơn
+    fun loadHome() {
+        loadUserData()
         fetchDeliciousDishes()
         fetchAllRestaurants()
+        viewModelScope.launch {
+            try {
+                val addresses = FoodHubClient.list<com.example.dacs_3_composer.core.model.UserAddress>("addresses")
+                userAddress = addresses.firstOrNull { it.isDefault }?.addressDetail
+                    ?: addresses.firstOrNull()?.addressDetail.orEmpty()
+            } catch (exception: Exception) {
+                Log.e("HomeViewModel", "Lỗi tải địa chỉ", exception)
+            }
+        }
     }
 
     // --- QUẢN LÝ THÔNG TIN NGƯỜI DÙNG ---
@@ -50,19 +59,29 @@ class HomeViewModel : ViewModel() {
                 val user = FoodHubClient.get<com.example.dacs_3_composer.core.model.User>("users", "me")
                 userName = user.getDisplayName()
                 userImageUrl = user.avatarUrl
-                val addresses = FoodHubClient.list<com.example.dacs_3_composer.core.model.UserAddress>("addresses")
-                userAddress = addresses.firstOrNull { it.isDefault }?.addressDetail
-                    ?: addresses.firstOrNull()?.addressDetail.orEmpty()
             } catch (exception: Exception) {
                 Log.e("HomeViewModel", "Lỗi lấy hồ sơ từ MySQL: ${exception.message}", exception)
             }
         }
     }
 
+    var dishesLoading by mutableStateOf(false)
+        private set
+    var dishesFailed by mutableStateOf(false)
+        private set
+    private var loadedDishes = false
+    fun ensureDishes() {
+        if (!loadedDishes && !dishesLoading) fetchDeliciousDishes()
+    }
+
     private fun fetchDeliciousDishes() {
+        if (dishesLoading) return
+        dishesLoading = true
+        dishesFailed = false
         viewModelScope.launch {
-            try { _deliciousDishes.value = FoodHubClient.list("dishes") }
-            catch (e: Exception) { Log.e("HomeViewModel", "Lỗi tải món MySQL: ${e.message}", e) }
+            try { _deliciousDishes.value = FoodHubClient.list("dishes"); loadedDishes = true }
+            catch (e: Exception) { dishesFailed = true; Log.e("HomeViewModel", "Lỗi tải món", e) }
+            finally { dishesLoading = false }
         }
     }
 

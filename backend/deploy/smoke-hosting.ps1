@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$BaseUrl)
+param([string]$BaseUrl='https://chinh.alwaysdata.net/food-delivery-api/api/', [string]$ServiceAccountPath=$env:FOODHUB_FIREBASE_SERVICE_ACCOUNT)
 $ErrorActionPreference='Stop'
 $root=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $google=Get-Content -LiteralPath (Join-Path $root 'app\google-services.json') -Raw|ConvertFrom-Json
@@ -39,7 +39,8 @@ try{
     if($restored.fullName -ne $me.fullName){throw 'Profile restore failed'}
 }
 Write-Output ('PASS admin: health, Firebase sign-in, role, profile write/read/restore; users='+$users.Count+', stores='+$stores.Count+', dishes='+$dishes.Count+', orders='+$orders.Count)
-$service=Get-Content -LiteralPath 'C:\xampp\private\foodhub-service-account.json' -Raw|ConvertFrom-Json
+if (-not $ServiceAccountPath) { throw 'Provide ServiceAccountPath for the role checks.' }
+$service=Get-Content -LiteralPath $ServiceAccountPath -Raw|ConvertFrom-Json
 $rsa=[Security.Cryptography.RSA]::Create();$rsa.ImportFromPem($service.private_key)
 try{
     foreach($role in @('user','restaurant','shipper')){

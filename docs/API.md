@@ -1,17 +1,21 @@
 # API hiện tại
 
+`POST ai/meal-advisor` hỗ trợ duyệt toàn bộ thực đơn đang bán bằng các trang 8 món sắp theo ID tăng dần. `data.kind=page`, `hasMore` và `menuCursor` mô tả vị trí tiếp theo theo quán, giới hạn tiền món và ID cuối. Khi tiếp tục, Android gửi lại cursor trong phần tử cuối của `history`; mỗi lượt nhận tối đa 8 ID. Có thể gửi `answer` (tối đa 700 ký tự) bên cạnh câu hỏi và ID để giữ ngữ cảnh bốn lượt. Client cũ vẫn gửi câu hỏi và ID để khôi phục trang từ lịch sử gần nhất. Các đề xuất riêng lẻ giữ tối đa 3 thẻ. `kind=meal` là một bữa cùng quán, tổng tiền được tính trên giá hiện tại và phí giao chỉ tính một lần.
+
+Từ 19/11/2026, `POST ai/meal-advisor` nhận thêm `history` tùy chọn, tối đa bốn phần tử theo thứ tự cũ tới mới. Mỗi phần tử có `question` (tối đa 500 ký tự) và `dishIds` (tối đa ba ID chuỗi theo thứ tự hiển thị). Tin nhắn tiếp theo dùng các ID này để tra lại giá/quán/mô tả hiện hành. Trường `data.message` chứa câu trả lời và `data.recommendations` chứa các thẻ món mở được. Ứng dụng cũ có thể bỏ qua lịch sử.
+
+**Tối ưu Alwaysdata 16/11/2026:** `POST ai/meal-advisor` cho customer/admin active, Firebase Bearer token. Giữ payload `message`, `budget`, `budgetScope` (`food`/`total`) và tối đa ba thẻ món thật. Giữ Gemini 4 Hydrogen theo người dùng; một lượt model chọn ID, bộ lọc đơn giản trả ngay, cache riêng tài khoản 5 phút, ngắt chờ Google sau 5,5 giây và dùng kết quả lọc có thông báo rõ. Thêm source/cacheHit/geminiMs/elapsedMs/fallbackReason, tương thích APK hiện tại. Google còn có lúc trả 429/timeout; không coi bộ lọc là câu trả lời Gemini. Xem [AI_MEAL_ADVISOR.md](AI_MEAL_ADVISOR.md).
+
 Nguồn: `backend/api/index.php`, đối chiếu ngày 12/11/2026. Đây là danh mục implementation hiện có, không phải đặc tả của toàn bộ PRD.
 
 Cập nhật ngày 14/11/2026: endpoint/JSON giữ nguyên, **host đã chuyển sang Alwaysdata**, backend dùng `food_delivery_app` trên TiDB Cloud qua PDO MySQL/TLS. PayOS confirm-webhook đã xác nhận URL mới; mã Android đã đổi BASE_URL. App đã cài trước đó cần build/cài lại. Xem ALWAYSDATA và SESSION_HANDOFF.
 
 ## 1. Địa chỉ và xác thực
 
-- Local: `http://localhost/food-delivery-api/api/`.
 - Android hiện cấu hình: `https://chinh.alwaysdata.net/food-delivery-api/api/`.
 - Thay đổi base URL tại `FoodHubClient.BASE_URL`, không sửa rải rác trong từng màn hình.
 - Mọi route nghiệp vụ đi qua xác minh Firebase ID token: chữ ký RS256, `kid`, `aud`, `iss`, `sub`, `exp`, `iat`.
 - Header: `Authorization: Bearer <Firebase ID token>` và `Accept: application/json`.
-- Client không còn gửi header riêng ngrok.
 - `GET /` là health check không cần đăng nhập. `OPTIONS` xử lý preflight. `POST /payos/webhook` dùng chữ ký PayOS thay Bearer token.
 
 Không gửi token hoặc các khóa dịch vụ vào nội dung tài liệu, issue hay log chia sẻ.
@@ -118,7 +122,7 @@ Server chuẩn hóa về chữ thường. Khách chỉ có nhánh hủy; quán, 
 | HTTP | Thường cần kiểm tra |
 | --- | --- |
 | 401 | Bearer header, Firebase ID token, hết hạn, chữ ký, đồng hồ máy, sai Firebase project |
-| 403 | Role MySQL và quyền sở hữu; không kết luận là sai đường dẫn ngrok |
+| 403 | Role MySQL và quyền sở hữu |
 | 404 | Route/ID hoặc chưa có hồ sơ MySQL/quán; phân biệt với lỗi kết nối |
 | 409 | Xung đột nhận đơn, trạng thái/phiên thanh toán |
 | 422 | Dữ liệu đầu vào, quán/món/voucher không hợp lệ |

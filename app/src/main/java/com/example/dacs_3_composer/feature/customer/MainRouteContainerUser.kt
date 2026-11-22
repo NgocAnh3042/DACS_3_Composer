@@ -1,5 +1,11 @@
 package com.example.dacs_3_composer.feature.customer
 
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
+import com.example.dacs_3_composer.feature.customer.home.components.AllDishesScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -35,8 +41,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -81,19 +85,38 @@ fun MainRouteContainerUser(
         imageRes = R.drawable.banner1
     ))
 
+    val route = navController.currentBackStackEntryAsState().value?.destination?.route
     Scaffold(
-        bottomBar = { BottomBarUser(navController = navController) }
+        bottomBar = { if (route != "meal_advisor" && route != "all_dishes") BottomBarUser(navController = navController) }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding)) {
             NavHost(navController = navController, startDestination = "home") {
                 composable("home") {
                     HomeScreen(
                         navController = navController,
+                        cartViewModel = cartViewModel,
                         onNavigateToSearch = { query -> navController.navigate("search/$query") },
                         onNavigateToChat = { navController.navigate("message_center") }
                     )
                 }
+                composable("all_dishes") { entry ->
+                    val home = remember(entry) { navController.getBackStackEntry("home") }
+                    val model: HomeViewModel = viewModel(viewModelStoreOwner = home)
+                    val dishes by model.deliciousDishes.collectAsState()
+                    LaunchedEffect(model) { model.ensureDishes() }
+                    AllDishesScreen(dishes, model.dishesLoading, model.dishesFailed, model::ensureDishes, { navController.popBackStack() }) { dish ->
+                        cartViewModel.currentRestaurantId = dish.restaurantId
+                        cartViewModel.currentRestaurantName = model.restaurantsList.value.find { it.id == dish.restaurantId }?.name.orEmpty()
+                        navController.navigate("restaurant_detail/${dish.restaurantId}")
+                    }
+                }
                 composable("notification") { NotificationScreen() }
+                composable("meal_advisor") {
+                    com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenRestaurant = { restaurantId -> navController.navigate("restaurant_detail/$restaurantId") }
+                    )
+                }
                 
                 composable("message_center") {
                     MessageCenterScreen(

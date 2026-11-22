@@ -55,9 +55,10 @@ fun MainRouteContainerRestaurant(
     val showBottomBar = currentRoute !in listOf("message_center", "chat_detail/{conversationId}")
 
     Scaffold(
+        floatingActionButton = { if (currentRoute == NavigationRestaurant.Dashboard.route) androidx.compose.material3.ExtendedFloatingActionButton(onClick = { navController.navigate("foodhub_support") }) { androidx.compose.material3.Text("Trợ lý FoodHub") } },
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
-            if (showBottomBar) {
+            if (showBottomBar && currentRoute != "foodhub_support") {
                 NavigationBar(
                     modifier = Modifier.clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                     containerColor = Color.White,
@@ -101,6 +102,10 @@ fun MainRouteContainerRestaurant(
             startDestination = NavigationRestaurant.Dashboard.route,
             modifier = Modifier.padding(paddingValues)
         ) {
+            composable("foodhub_support") {
+                com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
+                    onBack = { navController.popBackStack() }, onOpenRestaurant = {}, staff = true)
+            }
             composable(NavigationRestaurant.Dashboard.route) {
                 RestaurantHomeScreen(onMessageClick = { navController.navigate("message_center") })
             }
