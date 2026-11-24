@@ -25,11 +25,13 @@ data class RestaurantDetail(
 
     // 🌟 BỔ SUNG 2 TRƯỜNG NÀY ĐỂ ĐỊNH VỊ QUÁN
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val distanceKm: Double? = null,
+    val shippingFee: Double = 15000.0
 ) {
     // Constructor không tham số bắt buộc cho Firestore .toObject()
     constructor() : this(
-        "", "", 0.0, "", "15-20 min", "0.5 km", "", "", "", "", "", "", "",
-        true, true, true, false, false, null, null
+        "", "", 0.0, "", "15-20 phút", "Chưa rõ vị trí", "", "", "", "", "", "", "",
+        true, true, true, false, false, null, null, null, 15000.0
     )
 }

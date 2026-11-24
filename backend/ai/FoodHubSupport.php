@@ -21,26 +21,28 @@ final class FoodHubSupport {
         return self::query($db,'SELECT o.id,o.status,o.total_amount,o.payment_method,o.payment_status,s.name,ship.name AS shipper'.self::FROM.' WHERE '.$where.' ORDER BY o.placed_at DESC,o.id DESC LIMIT 1',$params)->fetch(PDO::FETCH_ASSOC)?:null;
     }
     private static function normalize(string $text): string {
-        return preg_replace(['/\bdh\b/', '/\b(?:ko|khum|hong|k)\b/', '/\bshp\b/'], ['don hang','khong','shop'], MealAdvisor::folded($text));
+        return FoodHubKnowledgeBase::expandVietnamese($text);
     }
     public static function intent(string $text): ?string {
         $q=self::normalize($text);
         foreach ([
-            'feedback'=>'^(?:danh gia|gop y cau tra loi|phan hoi tro ly)',
-            'submit'=>'^gui (?:phieu|yeu cau) ho tro(?: #?\d+)?[.! ]*$',
-            'confirmCancel'=>'^xac nhan huy (?:don )?#?\d+[.! ]*$',
-            'cancel'=>'huy (don|giup|dum|ho minh)|bo don',
-            'report'=>'doanh thu|bao cao|thong ke|phan loai khieu nai|phan hoi chua giai quyet',
-            'incident'=>'(giao|nhan|bi) (sai|nham|thieu)|thieu mon|bi do|do het|do an hong|khieu nai|tranh chap|chiem quyen|nhan vien (that|ho tro)|gap admin|bao su co|tru tien.*(loi|hai lan|2 lan)|khong hai long',
-            'refund'=>'hoan tien|hoan tra',
-            'voucher'=>'voucher|ma (giam|khuyen)|khuyen mai',
-            'history'=>'lich su (mua|dat|don)|nhung mon.*(tung|da) (mua|dat)|hay dat mon gi',
+            'feedback'=>'^(?:danh gia(?:\s*:|\s+cau tra loi|\s+tro ly|\s+chua giai quyet|\s+huu ich)|gop y cau tra loi|phan hoi tro ly)',
+            'submit'=>'^(?:ok\s+|oke\s+|u\s+|da\s+|nho\s+(?:shop|em|ban)\s+)?(?:gui|tao|lap|chuyen)\s+(?:giup\s+(?:minh|toi|em|anh|chi)\s+)?(?:phieu|yeu cau)\s+ho tro(?: #?\d+)?(?:\s+(?:di|nha|nhe|luon|giup minh|voi|a))*[.! ]*$',
+            'confirmCancel'=>'^(?:ok\s+|oke\s+|u\s+|da\s+)?xac nhan huy (?:don )?#?\d+(?:\s+(?:di|nha|nhe|luon|a))*[.! ]*$',
+            'cancel'=>'huy (?:don|giup|dum|ho minh|cho minh|di|luon)|bo don|(?:the|vay) huy',
+            'report'=>'doanh thu|bao cao|thong ke|phan loai khieu nai|phan hoi chua giai quyet|tong phi giao|thu nhap',
+            'incident'=>'(?:giao|nhan|bi) (?:sai|nham|thieu)|thieu mon|bi do|do het|do an (?:hong|nguoi|song|oi thiu)|nguoi ngat|bi song|oi thiu|co toc|di vat|khong dung ghi chu|(?:bao|trang thai)\s*da giao.*(?:chua nhan|khong thay|chua thay)|khieu nai|tranh chap|chiem quyen|nhan vien (?:that|ho tro)|gap admin|bao su co|tru tien.*(?:loi|hai lan|2 lan)|khong hai long|tien bi tru (?:2|hai) lan|mat tien|phat sinh tien|tieu tien 2 lan|thanh toan 2 lan',
+            'refund'=>'hoan tien|hoan tra|tra lai tien|lay lai tien',
+            'voucher'=>'voucher|ma (?:giam|khuyen)|khuyen mai|ma giam gia|co ma giam|dung ma',
+            'history'=>'lich su (?:mua|dat|don)|nhung mon.*(?:tung|da) (?:mua|dat)|hay dat mon gi',
             'pay'=>'thanh toan|vi dien tu|tien mat|payos|chuyen khoan',
-            'order'=>'(?<!thuc )don (tui|toi|minh|hang|cua|moi|gan|nay|do|dau|#?\d+)|(?<!thuc )don.*(dat|giao)|shipper|ship toi dau|chua (thay )?giao|doi.*(tieng|phut)|giao cham|khi nao.*(giao|toi)|tai xe',
-            'fee'=>'^(?:cho (?:minh|toi) hoi )?(?:phi (?:ship|giao hang|van chuyen)|tien ship)(?: la| bao nhieu| the nao| vay| a| nhi)*[?!. ]*$',
+            'order'=>'(?<!thuc )(?<!hoa )don (?:tui|toi|minh|hang|cua|moi|gan|nay|do|dau|#?\d+)|(?<!thuc )(?<!hoa )don.*(?:dat|giao)|shipper|ship toi dau|chua (?:thay )?giao|doi.*(?:tieng|phut)|giao cham|giao hang.*lau|khi nao.*(?:giao|toi)|tai xe|dau roi|o dau roi|sao.*lau|sao chua thay|bao lau nua|con cach bao lau|ship lau|bao gio.*(?:giao|toi)|don bao gio|lau du vay',
+            'fee'=>'^(?:cho (?:minh|toi|em) hoi )?(?:phi (?:ship|giao hang|van chuyen)|tien ship)(?: hien tai| la| bao nhieu| bn| the nao| vay| ban| shop| em| a| nhi)*[?!. ]*$',
             'allergy'=>'di ung|phan ve',
-            'role'=>'quan ly mon|cap nhat don|nhan don|huong dan giao|tro giup|ban giup duoc gi|^(?:xin chao|chao shop|chao ban|hello|hi)[!. ]*$',
-            'thanks'=>'^(cam on|cam on shop|cam on ban|thanks|ok cam on)[!. ]*$'
+            'identity'=>'ban la ai|nguoi that|nhan vien that|ban la bot|ban la robot|la ai hay nguoi|tro ly ao',
+            'farewell'=>'^(?:tam biet.*|bye.*|bai bai.*|thoi khong can nua.*|thoi khoi.*|chuc shop.*|hen gap lai.*)[!. ?❤️😊]*$',
+            'thanks'=>'^(?:(?:ok|oke|okê)\s*(?:nha|nhe)?\s*)?(?:shop de thuong.*|cam on.*|thanks.*|ok nhe|oke nha|oke|okê|do an ngon.*|mon ngon.*)[!. ?❤️🥰😊]*$',
+            'role'=>'quan ly mon|cap nhat don|nhan don|huong dan giao|tro giup|ban giup duoc gi|lam gi duoc|(?:^|\b)(?:xin chao|chao|hello|hi|hey|alo|shop oi|cho minh hoi chut|co ai o do khong)(?:\s+(?:shop|ban|em|foodhub|oi|nhe|nha|a))*[!. ?]*$'
         ] as $intent=>$pattern) if (preg_match('~'.$pattern.'~u',$q)) return $intent;
         return null;
     }
@@ -60,16 +62,35 @@ final class FoodHubSupport {
         } catch(Throwable $err) {if($db->inTransaction())$db->rollBack();throw $err;}
     }
     public static function detectEmotion(string $text): string {
-        $q=MealAdvisor::folded($text);
-        if (preg_match('/(tuc|buc|lam an kieu gi|lua dao|te qua|kem coi|ko chiu noi|gay gat)/u',$q)) return 'angry';
-        if (preg_match('/(sao.*chua thay|chua thay|sao lau|lo qua|khi nao|sap.*chua|kip.*khong|hoi hop|doi.*lau)/u',$q)) return 'anxious';
-        if (preg_match('/(sai roi|nham roi|do het|thieu roi|hong roi|chan|that vong|bi do)/u',$q)) return 'frustrated';
-        if (preg_match('/(gap|nhanh giup|khan cap|trong 15p|trong 10p|voi)/u',$q)) return 'urgent';
-        if (preg_match('/(cam on|ngon|tuyet|tot lam|ok|thanks)/u',$q)) return 'satisfied';
+        $q=self::normalize($text);
+        // angry: strong frustration / accusation
+        if (preg_match('/(tuc|\bbuc\b|buc xuc|buc minh|dien tiet|lam an kieu gi|lam an chan|ai ma chiu noi|lua dao|te qua|kem coi|khong chiu noi|gay gat|vo ly|nuc cuoi|khong chap nhan|qua dang|kinh khung|chan ngan|uc che|gion mat|chan that)/u',$q)) return 'angry';
+        // urgent: needs speed
+        if (preg_match('/(gap lam|can gap|nhanh giup|nhanh len|khan cap|trong 15p|trong 10p|voi len|voi voi|voi qua|can ngay|luc nay luon|tranh thu|sap di lam|tre gio)/u',$q)) return 'urgent';
+        // sad / disappointed
+        if (preg_match('/(buon|hut hang|tiec qua|that vong|chan ghe)/u',$q)) return 'sad';
+        // confused
+        if (preg_match('/(boi roi|khong hieu|chua hieu|ua vay la sao|la sao vay|khong ro|chua ro|giai thich lai)/u',$q)) return 'confused';
+        // frustrated: something went wrong or extreme impatience
+        if (preg_match('/(sai roi|nham roi|do het|thieu roi|hong roi|chan qua|bi do|ma sao lai|da noi roi ma|sai mat roi|hu het|mat het|giao sai|giao nham|thieu mon|doi muon xiu|doi xiu|lau du vay|sao lau du|gi ky vay)/u',$q)) return 'frustrated';
+        // anxious: worry, waiting, wondering if on time
+        if (preg_match('/(lo qua|hoi hop|sap.*het gio|khong biet.*kip|dang cho.*hoai|cho mai|sao.*chua thay|chua thay giao|sao.*lau|khi nao.*toi|chac.*kip|lo la|doi.*lau|doi ca tieng|doi gan.*tieng|troi oi|oi troi)/u',$q)) return 'anxious';
+        // satisfied / happy
+        if (preg_match('/(cam on|ngon|tuyet|tot lam|thanks|ok nha|oke|hai long|de thuong|vui qua|thich qua)/u',$q)) return 'satisfied';
         return 'neutral';
     }
-    private static function dispatch(?callable $humanize,string $userMessage,array $history,array $facts,string $fallback): string {
+    private static function dispatch(?callable $humanize,string $userMessage,array $history,array $facts,string $fallback,array $summary=[],array $approvedPrefs=[]): string {
         if ($humanize===null) return $fallback;
+        $mergedSummary=$summary;
+        if (!empty($approvedPrefs['preferredPronoun']) && empty($mergedSummary['pronoun'])) {
+            $mergedSummary['pronoun']=$approvedPrefs['preferredPronoun'];
+        }
+        $facts['pronounPreference']=$facts['pronounPreference']??ConversationContext::detectPronoun($userMessage,$history,$mergedSummary);
+        $facts['preferBrief']=$facts['preferBrief']??ConversationContext::prefersBrief($userMessage);
+        $facts['isContinuation']=$facts['isContinuation']??(!empty($history));
+        $facts['discourse']=$facts['discourse']??ConversationContext::analyzeDiscourse($userMessage,$history,$mergedSummary);
+        $facts['adaptiveStyle']=$facts['adaptiveStyle']??UserPersonalization::resolveStyle($userMessage,(string)($facts['emotion']??'neutral'),$approvedPrefs);
+        if ($approvedPrefs) $facts['approvedPreferences']=$approvedPrefs;
         try {
             $result=$humanize($userMessage,$history,$facts,$fallback);
             return (is_string($result)&&trim($result)!=='')?trim($result):$fallback;
@@ -80,25 +101,63 @@ final class FoodHubSupport {
         $text=$input['message'];$q=self::normalize($text);$kind=self::intent($text);
         $emotion=self::detectEmotion($text);
         $history=$input['history'];$prev=end($history)?:[];
+        $summary=is_array($input['summary']??null)?$input['summary']:[];
+        $approvedPrefs=is_array($input['approvedPreferences']??null)?$input['approvedPreferences']:[];
         $prior=(string)($prev['answer']??'');
-        if (!$kind && str_contains($prior,'Gửi phiếu hỗ trợ') && preg_match('/^(da |minh |toi |tui |bi |anh |co |chua |thu |van |thieu |mon )/',$q)) $kind='incident';
-        if (!$kind && preg_match('/^(vay |gio |the )?(sao roi|toi dau roi|bao lau nua|ai giao)[?.! ]*$/',$q) && str_contains($prior,'Đơn #')) $kind='order';
-        if (!$kind && $prev && (self::intent($prev['question']??'')==='allergy' || str_contains($prior,'nguy cơ tiếp xúc chéo')) && !preg_match('/doi chu de|xem menu|thuc don|khau phan/',$q)) $kind='allergy';
-        if (!$kind && $classify && ($me['role']!=='customer' || !$prev || !($prev['dishIds']??[]) || preg_match('/\b(tien|ship|giao|don|doi|loi|buc|hu|hong|su co|tai khoan)\b/',$q)) && !preg_match('/\b(mon|menu|thuc don|an|mi|com|bun|pho|quan|cay|re nhat|goi y)\b/',$q)) {
-            $kind=$classify($text,(string)($prev['question']??''));
+        $priorQ=(string)($prev['question']??'');
+        $hasOrderContext=str_contains($prior,'Đơn #') || !empty($summary['orderId']) || self::intent($priorQ)==='order';
+        if (!$kind && str_contains($prior,'Gửi phiếu hỗ trợ') && preg_match('/^(?:ok|oke|u|uh|vang|da)?\s*(?:gui di|gui luon|gui giup|tao phieu|lam phieu|chuyen nhan vien|nho gui)[.! nha nhe a]*$/u',$q)) $kind='submit';
+        if (!$kind && str_contains($prior,'Gửi phiếu hỗ trợ') && preg_match('/^(da |minh |toi |tui |bi |anh |co |chua |thu |van |thieu |mon |u |dung )/',$q)) $kind='incident';
+        if (!$kind && preg_match('/^(?:u|uh|vang|da|ok|oke)?\s*(?:dung roi|chinh xac|dung a|dung nha|phai roi)[.! ]*$/u',$q)) {
+            if (str_contains($prior,'Xác nhận hủy đơn')) $kind='cancel';
+            elseif (str_contains($prior,'Gửi phiếu hỗ trợ')) $kind='incident';
+            elseif ($hasOrderContext || str_contains($prior,'đơn vừa đặt')) $kind='order';
         }
-        if (!$kind || $kind==='meal') return $me['role']==='customer'?null:self::dispatch($humanize,$text,$history,['intent'=>'role','role'=>$me['role'],'emotion'=>$emotion],self::guide($me['role']));
-        if ($kind==='clarify') return self::dispatch($humanize,$text,$history,['intent'=>'clarify','emotion'=>$emotion],'Bạn cho mình biết thêm một chút nhé. Bạn đang hỏi về đơn vừa đặt, tìm món hay gặp sự cố khi dùng FoodHub?');
+        if (!$kind && $hasOrderContext && preg_match('/(?:^(?:vay |gio |the |con |ua |sao )?(?:sao roi|toi dau roi|bao lau nua|con bao lau|ai giao|no sao roi|cai vua nay|neu lau qua thi sao)[?.! ]*$|dung im mot cho|chua nhuc nhich|chay nguoc duong)/u',$q)) $kind='order';
+        if (!$kind && $prev && (self::intent($priorQ)==='allergy' || str_contains($prior,'nguy cơ tiếp xúc chéo')) && !preg_match('/doi chu de|xem menu|thuc don|khau phan/',$q)) $kind='allergy';
+
+        // Contextual FAQ / Policy retrieval (high-confidence match overrides generic voucher/order/clarify fallbacks)
+        $kb=FoodHubKnowledgeBase::retrieve($text,$me['role'],$history);
+        if ($kb!==null && (
+            $kind===null
+            || ($kind==='voucher' && $kb['id']==='voucher_troubleshoot')
+            || ($kind==='report' && $kb['id']==='seller_revenue_and_categories' && preg_match('/\b(lam sao|cach|huong dan|o dau|nut nao|xem chi tiet bieu do)\b/',$q))
+            || ($kind==='order' && in_array($kb['id'],['contact_shipper_store','delivered_not_received','delivery_time_tracking','order_cancelled_by_store','change_address_phone','driver_store_issue','driver_customer_unreachable','driver_vehicle_breakdown_or_incident','seller_menu_operations'],true) && !preg_match('/(?:#|\bdon\s+)\d+\b/',$q))
+            || ($kind==='role' && in_array($kb['id'],['seller_menu_operations','seller_revenue_and_categories','driver_store_issue','driver_customer_unreachable','driver_vehicle_breakdown_or_incident','partner_register'],true))
+        )) {
+            $kbFacts=['intent'=>'faq','knowledgeId'=>$kb['id'],'knowledgeTopic'=>$kb['topic'],'verifiedKnowledge'=>$kb['facts'],'emotion'=>$emotion];
+            if ($kb['requiresTicketHint']) $kbFacts['actionRequired']='Gửi phiếu hỗ trợ';
+            return self::dispatch($humanize,$text,$history,$kbFacts,$kb['fallback'],$summary,$approvedPrefs);
+        }
+
+        // Vietnamese meal/weather/mood cues ("trời mưa lạnh ăn gì?", "cuối tháng hết tiền ăn gì rẻ no?") -> route to TiDB MealAdvisor
+        if (!$kind && $me['role']==='customer' && FoodHubKnowledgeBase::isMealMoodContext($text)) {
+            return null;
+        }
+
+        if (!$kind && $classify && ($me['role']!=='customer' || !$prev || !($prev['dishIds']??[]) || preg_match('/\b(tien|ship|giao|don|doi|loi|buc|hu|hong|su co|tai khoan)\b/',$q)) && !preg_match('/\b(mon|menu|thuc don|an|mi|mien|chao|com|bun|pho|quan|cay|re nhat|goi y|combo|set|suat|khau phan|bua|giai khat|nuoc|uong|tra sua|ca phe|banh|an vat|trang mieng|chay|nuong|pizza|burger|xoi|hai san|oc|sushi|ramen|udon|tokbokki|kimbap|sinh to|che)\b/',$q)) {
+            $kind=$classify($text,$priorQ);
+        }
+        if ($kind==='faq' && $kb!==null) {
+            $kbFacts=['intent'=>'faq','knowledgeId'=>$kb['id'],'knowledgeTopic'=>$kb['topic'],'verifiedKnowledge'=>$kb['facts'],'emotion'=>$emotion];
+            if ($kb['requiresTicketHint']) $kbFacts['actionRequired']='Gửi phiếu hỗ trợ';
+            return self::dispatch($humanize,$text,$history,$kbFacts,$kb['fallback'],$summary,$approvedPrefs);
+        }
+        if (!$kind || $kind==='meal') return $me['role']==='customer'?null:self::dispatch($humanize,$text,$history,['intent'=>'role','role'=>$me['role'],'emotion'=>$emotion],self::guide($me['role']),$summary,$approvedPrefs);
+        if ($kind==='clarify') return self::dispatch($humanize,$text,$history,['intent'=>'clarify','emotion'=>$emotion],'Mình cho em biết thêm một chút nhé. Mình đang hỏi về đơn vừa đặt, tìm món hay gặp sự cố khi dùng FoodHub ạ?',$summary,$approvedPrefs);
         $id=null;
         if (preg_match('/(?:#|\bdon\s+)(\d+)\b/',$q,$m)) $id=$m[1];
         elseif (!preg_match('/moi nhat|gan nhat|hoi nay/',$q)) {
             foreach(array_reverse($history) as $turn) if(preg_match('/Đơn #(\d+)\b/u',$turn['answer']??'',$m)) {$id=$m[1];break;}
+            if ($id===null && !empty($summary['orderId'])) $id=(string)$summary['orderId'];
         }
-        if ($kind==='thanks') return self::dispatch($humanize,$text,$history,['intent'=>'thanks','emotion'=>$emotion],'Dạ, cảm ơn bạn! Khi cần xem đơn hoặc tìm món, cứ nhắn mình nhé.');
-        if ($kind==='role') return self::dispatch($humanize,$text,$history,['intent'=>'role','role'=>$me['role'],'emotion'=>$emotion],self::guide($me['role']));
+        if ($kind==='identity') return self::dispatch($humanize,$text,$history,['intent'=>'identity','isAiAssistant'=>true,'emotion'=>$emotion],'Dạ em là FoodHub AI, trợ lý ảo của ứng dụng FoodHub ạ. Mình cần em hỗ trợ xem đơn hàng, tìm món hay giải đáp vấn đề gì nha?',$summary,$approvedPrefs);
+        if ($kind==='farewell') return self::dispatch($humanize,$text,$history,['intent'=>'farewell','emotion'=>$emotion],'Dạ tạm biệt mình nha! Chúc mình có bữa ăn thật ngon miệng, khi nào cần hỗ trợ cứ nhắn em nhé 💙',$summary,$approvedPrefs);
+        if ($kind==='thanks') return self::dispatch($humanize,$text,$history,['intent'=>'thanks','emotion'=>$emotion],'Dạ cảm ơn mình nhiều nha! Khi cần xem đơn hoặc tìm món, cứ nhắn em nhé.',$summary,$approvedPrefs);
+        if ($kind==='role') return self::dispatch($humanize,$text,$history,['intent'=>'role','role'=>$me['role'],'emotion'=>$emotion],self::guide($me['role']),$summary,$approvedPrefs);
         if ($kind==='fee') {
-            $msg='Phí giao hệ thống hiện là '.MenuKnowledge::money($fee).'. Màn hình xác nhận đơn sẽ hiển thị tổng sau khi áp dụng voucher.';
-            return self::dispatch($humanize,$text,$history,['intent'=>'fee','deliveryFee'=>$fee,'feeFormatted'=>MenuKnowledge::money($fee),'emotion'=>$emotion],$msg);
+            $msg='Phí giao hàng từ 1–3 km là '.MenuKnowledge::money($fee).', trên 3 km cứ thêm mỗi 1 km cộng thêm 10.000đ (ví dụ 4 km là 25.000đ). Tổng sau voucher hiển thị ở màn hình xác nhận đơn.';
+            return self::dispatch($humanize,$text,$history,['intent'=>'fee','baseDeliveryFee'=>$fee,'baseFeeFormatted'=>MenuKnowledge::money($fee),'rule'=>'1-3km: 15.000đ, trên 3km: +10.000đ mỗi 1km tiếp theo (ví dụ 4km = 25.000đ)','emotion'=>$emotion],$msg,$summary,$approvedPrefs);
         }
         if ($kind==='allergy') {
             $refs=$prev['dishIds']??[];
@@ -149,29 +208,33 @@ final class FoodHubSupport {
             $msg='Trong phạm vi tài khoản của bạn có '.$r['n'].' đơn hoàn tất. '.($me['role']==='driver'?'Tổng phí giao':'Tổng giá trị đơn gồm phí giao').' là '.MenuKnowledge::money((float)$r['total']).'.';
             return self::dispatch($humanize,$text,$history,['intent'=>'report','role'=>$me['role'],'orderCount'=>$r['n'],'totalAmount'=>(float)$r['total'],'emotion'=>$emotion],$msg);
         }
-        $accountIncident=preg_match('/chiem quyen|tai khoan/',self::normalize($text.' '.($prev['question']??'')));
+        $accountIncident=(bool)preg_match('/chiem quyen|tai khoan/',self::normalize($text.' '.($prev['question']??'')));
         if ($accountIncident && in_array($kind,['incident','submit'],true)) $id=null;
         $general=$accountIncident || ($me['role']!=='customer' && $id===null);
         $o=$general?null:self::order($db,$me,$id);
         if ($id!==null && !$o) return self::dispatch($humanize,$text,$history,['intent'=>'order_not_found','orderId'=>$id,'emotion'=>$emotion],'Mình không tìm thấy đơn đó trong phạm vi tài khoản này. Bạn kiểm tra lại mã đơn giúp mình nhé.');
         $label=$o?'Đơn #'.$o['id'].' tại '.$o['name']: 'Tài khoản của bạn';
         if ($kind==='submit') {
-            if (!str_contains($prior,'Gửi phiếu hỗ trợ')) return self::dispatch($humanize,$text,$history,['intent'=>'submit','stage'=>'prompt','emotion'=>$emotion],'Bạn mô tả sự cố và cho mình biết đơn liên quan trước nhé.');
-            $lines=[];foreach($history as $turn) $lines[]=mb_substr($turn['question'],0,350);
+            if (!str_contains($prior,'Gửi phiếu hỗ trợ')) return self::dispatch($humanize,$text,$history,['intent'=>'submit','stage'=>'prompt','emotion'=>$emotion],'Bạn mô tả sự cố và cho mình biết đơn liên quan trước nhé.',$summary,$approvedPrefs);
+            $lines=[];foreach($history as $turn) $lines[]=ConversationContext::sanitize(mb_substr((string)$turn['question'],0,350));
             $details=self::normalize(implode(' ',$lines));
             $category=match(true) {
                 str_contains($details,'thieu')=>'Thiếu món',preg_match('/nham|sai mon/',$details)===1=>'Sai món',
-                str_contains($details,'bi do')=>'Đổ món',preg_match('/thanh toan|tru tien|hoan tien/',$details)===1=>'Đối soát',
+                str_contains($details,'bi do')=>'Đổ món',preg_match('/nguoi|bi song|oi thiu|co toc|di vat/',$details)===1=>'Chất lượng món',
+                preg_match('/da giao.*chua nhan/',$details)===1=>'Chưa nhận được hàng',
+                preg_match('/thanh toan|tru tien|hoan tien/',$details)===1=>'Đối soát',
                 str_contains($details,'tai khoan')=>'Tài khoản',default=>'Sự cố cần kiểm tra'
             };
-            $summary="[FoodHub · $category]\n".$label."\nKhách mô tả: ".implode("\n",$lines);
-            $ticket=self::ticket($db,$me,$o,$summary);
+            $ticketSummary="[FoodHub · $category]\n".$label."\nKhách mô tả: ".implode("\n",$lines)."\nHành động chờ xử lý: Admin kiểm tra và phản hồi qua Tin nhắn.";
+            $ticket=self::ticket($db,$me,$o,$ticketSummary);
             $msg="Đã chuyển phiếu #$ticket vào hộp thư hỗ trợ của Admin. Bạn có thể bổ sung ảnh và theo dõi phản hồi trong Tin nhắn.";
-            return self::dispatch($humanize,$text,$history,['intent'=>'submit','ticketId'=>$ticket,'category'=>$category,'label'=>$label,'orderId'=>$o['id']??null,'emotion'=>$emotion],$msg);
+            return self::dispatch($humanize,$text,$history,['intent'=>'submit','handoffCreated'=>true,'ticketId'=>$ticket,'category'=>$category,'label'=>$label,'orderId'=>$o['id']??null,'emotion'=>$emotion],$msg,$summary,$approvedPrefs);
         }
         if ($kind==='incident') {
             $detail=match(true) {
                 $accountIncident=>'Bạn còn đăng nhập được tài khoản không? Đừng gửi mật khẩu hay mã xác thực trong chat.',
+                (bool)preg_match('/da giao.*(?:chua nhan|khong thay|chua thay)/',$q)=>'Bạn kiểm tra lại khu vực cổng/lễ tân và tin nhắn từ tài xế xem có gửi nhầm chỗ chưa nhé. Nếu vẫn chưa nhận được, gửi phiếu ngay để Admin đối soát với tài xế.',
+                (bool)preg_match('/nguoi|bi song|oi thiu|co toc|di vat|khong dung ghi chu/',$q)=>'Bạn chụp lại ảnh món ăn gặp vấn đề giúp mình nhé, sau khi mở phiếu có thể gửi ảnh trực tiếp trong mục Tin nhắn để Admin xử lý cùng quán.',
                 (bool)preg_match('/tru tien|thanh toan|hoan tien/',$q)=>'Bạn cho mình biết số tiền và khoảng giờ giao dịch để nhân viên đối soát nhé.',
                 str_contains($q,'thieu')=>'Bạn cho mình biết tên món và số phần còn thiếu nhé.',
                 (bool)preg_match('/sai|nham/',$q)=>'Bạn đặt món gì và thực tế nhận được món nào?',
@@ -179,7 +242,7 @@ final class FoodHubSupport {
                 default=>'Bạn cho mình biết chi tiết sự cố và cách bạn đã thử xử lý nhé.'
             };
             $msg=str_contains($prior,'Gửi phiếu hỗ trợ') ? $label.'. Mình đã ghi thêm thông tin bạn vừa cung cấp. Nhắn “Gửi phiếu hỗ trợ” để chuyển nội dung cho nhân viên.' : 'Mình rất tiếc vì bạn gặp sự cố. '.$label.'. '.$detail.' Nhắn “Gửi phiếu hỗ trợ” để chuyển nội dung cho nhân viên.';
-            return self::dispatch($humanize,$text,$history,['intent'=>'incident','label'=>$label,'order'=>$o,'promptDetail'=>$detail,'actionRequired'=>'Gửi phiếu hỗ trợ','emotion'=>$emotion],$msg);
+            return self::dispatch($humanize,$text,$history,['intent'=>'incident','label'=>$label,'order'=>$o,'promptDetail'=>$detail,'actionRequired'=>'Gửi phiếu hỗ trợ','emotion'=>$emotion],$msg,$summary,$approvedPrefs);
         }
         if ($kind==='pay' && !preg_match('/loi|that bai|tru tien|don |chua nhan/',$q)) {
             $msg='FoodHub hỗ trợ tiền mặt khi nhận hàng và thanh toán trực tuyến qua PayOS. Chọn phương thức tại bước xác nhận đơn; với PayOS, mở liên kết hoặc quét QR và chờ hệ thống xác nhận.';

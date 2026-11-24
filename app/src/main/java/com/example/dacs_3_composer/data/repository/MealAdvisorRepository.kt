@@ -30,8 +30,10 @@ data class MenuCursor(val afterId: String, val storeId: String?, val ceiling: Do
 data class MealChatContext(val question: String, val dishIds: List<String>, val answer: String? = null, val menuCursor: MenuCursor? = null)
 
 class MealAdvisorRepository {
+    private val conversationId = java.util.UUID.randomUUID().toString()
     suspend fun suggest(message: String, budget: Long?, includeDelivery: Boolean, history: List<MealChatContext>): MealAdvice {
         val payload = com.google.gson.JsonObject().apply {
+            addProperty("conversationId", conversationId)
             addProperty("message", message)
             // Existing API contract uses a ceiling of 10 million VND.
             addProperty("budget", budget ?: 10_000_000L)

@@ -1,17 +1,24 @@
 package com.example.dacs_3_composer.feature.restaurant
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,6 +27,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.dacs_3_composer.data.repository.ChatRepository
 import com.example.dacs_3_composer.feature.restaurant.home.RestaurantHomeScreen
+import com.example.dacs_3_composer.feature.restaurant.home.RestaurantHomeViewModel
+import com.example.dacs_3_composer.feature.restaurant.home.RestaurantRevenueDetailScreen
 import com.example.dacs_3_composer.feature.restaurant.menu.RestaurantMenuScreen
 import com.example.dacs_3_composer.feature.restaurant.order.RestaurantOrderScreen
 import com.example.dacs_3_composer.feature.restaurant.profile.RestauranProfileScreen
@@ -52,10 +61,37 @@ fun MainRouteContainerRestaurant(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val showBottomBar = currentRoute !in listOf("message_center", "chat_detail/{conversationId}")
+    val showBottomBar = currentRoute !in listOf("message_center", "chat_detail/{conversationId}", "restaurant_revenue_detail")
+    val dashboardViewModel: RestaurantHomeViewModel = viewModel()
 
     Scaffold(
-        floatingActionButton = { if (currentRoute == NavigationRestaurant.Dashboard.route) androidx.compose.material3.ExtendedFloatingActionButton(onClick = { navController.navigate("foodhub_support") }) { androidx.compose.material3.Text("Trợ lý FoodHub") } },
+        floatingActionButton = {
+            if (currentRoute == NavigationRestaurant.Dashboard.route) {
+                FloatingActionButton(
+                    onClick = { navController.navigate("foodhub_support") },
+                    shape = CircleShape,
+                    containerColor = Color(0xFF2159BC),
+                    contentColor = Color.White,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                    modifier = Modifier.size(54.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.SmartToy,
+                            contentDescription = "Trợ lý FoodHub AI",
+                            modifier = Modifier.size(27.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(9.dp)
+                                .background(Color(0xFF2ECC71), CircleShape)
+                                .border(1.5.dp, Color(0xFF2159BC), CircleShape)
+                        )
+                    }
+                }
+            }
+        },
         contentWindowInsets = WindowInsets(0.dp),
         bottomBar = {
             if (showBottomBar && currentRoute != "foodhub_support") {
@@ -104,10 +140,20 @@ fun MainRouteContainerRestaurant(
         ) {
             composable("foodhub_support") {
                 com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
-                    onBack = { navController.popBackStack() }, onOpenRestaurant = {}, staff = true)
+                    onBack = { navController.popBackStack() }, onOpenDish = {}, staff = true)
             }
             composable(NavigationRestaurant.Dashboard.route) {
-                RestaurantHomeScreen(onMessageClick = { navController.navigate("message_center") })
+                RestaurantHomeScreen(
+                    onMessageClick = { navController.navigate("message_center") },
+                    onRevenueDetailClick = { navController.navigate("restaurant_revenue_detail") },
+                    homeViewModel = dashboardViewModel
+                )
+            }
+            composable("restaurant_revenue_detail") {
+                RestaurantRevenueDetailScreen(
+                    onBackClick = { navController.popBackStack() },
+                    homeViewModel = dashboardViewModel
+                )
             }
 
             composable("message_center") {

@@ -11,11 +11,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.dacs_3_composer.R
 
 @Composable
@@ -37,7 +39,10 @@ fun TopSellingDishItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsyncImage(
-                model = imageUrl.ifBlank { R.drawable.images1 }, // Sử dụng ảnh dự phòng nếu chuỗi link trống
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(imageUrl.trim().ifBlank { R.drawable.images1 })
+                    .crossfade(true)
+                    .build(),
                 placeholder = painterResource(id = R.drawable.images1),
                 error = painterResource(id = R.drawable.images1),
                 contentDescription = dishName,

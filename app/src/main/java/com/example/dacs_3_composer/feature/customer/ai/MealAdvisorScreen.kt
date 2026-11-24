@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.repository.MealRecommendation
 import java.text.NumberFormat
 import java.util.Locale
@@ -48,9 +49,10 @@ private fun money(value: Number) = NumberFormat.getNumberInstance(Locale.forLang
 @Composable
 fun MealAdvisorScreen(
     onBack: () -> Unit,
-    onOpenRestaurant: (String) -> Unit,
+    onOpenDish: (String) -> Unit,
     viewModel: MealAdvisorViewModel = viewModel(),
-    staff: Boolean = false
+    staff: Boolean = false,
+    onSelectDish: ((Dish) -> Unit)? = null
 ) {
     val message by viewModel.message.collectAsStateWithLifecycle()
     val budget by viewModel.budget.collectAsStateWithLifecycle()
@@ -117,7 +119,7 @@ fun MealAdvisorScreen(
                                     Bubble(answer.message)
                                     Text(if (answer.source == "groq" || answer.source == "cache") "GPT-OSS 120B · Thực đơn FoodHub" else if (answer.source == "support") "Hỗ trợ FoodHub" else "Thực đơn FoodHub",
                                         style = MaterialTheme.typography.labelSmall, color = Secondary)
-                                    answer.recommendations.forEach { DishCard(it, if (answer.kind == "meal") 0.0 else answer.deliveryFee, onOpenRestaurant) }
+                                    answer.recommendations.forEach { DishCard(it, if (answer.kind == "meal") 0.0 else answer.deliveryFee, onOpenDish, onSelectDish) }
                                     if (answer.hasMore && index == turns.lastIndex) {
                                         OutlinedButton(onClick = { viewModel.send("Xem tiếp menu") }, enabled = !busy) { Text("Xem tiếp menu") }
                                     }
@@ -186,8 +188,21 @@ private fun Bubble(text: String, user: Boolean = false) {
 }
 
 @Composable
-private fun DishCard(item: MealRecommendation, fee: Double, onOpen: (String) -> Unit) {
-    Surface(onClick = { onOpen(item.dish.restaurantId) }, shape = RoundedCornerShape(14.dp), color = Color.White, contentColor = Ink) {
+private fun DishCard(
+    item: MealRecommendation,
+    fee: Double,
+    onOpenDish: (String) -> Unit,
+    onSelectDish: ((Dish) -> Unit)? = null
+) {
+    Surface(
+        onClick = {
+            onSelectDish?.invoke(item.dish)
+            onOpenDish(item.dish.id)
+        },
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White,
+        contentColor = Ink
+    ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (item.dish.imageUrl.isNotBlank()) AsyncImage(model = item.dish.imageUrl, contentDescription = null,
                 modifier = Modifier.size(60.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
@@ -197,7 +212,7 @@ private fun DishCard(item: MealRecommendation, fee: Double, onOpen: (String) -> 
                 Text(money(item.dish.price), color = Blue, fontWeight = FontWeight.Bold)
                 if (fee > 0) Text("${money(item.estimatedTotal)} gồm phí giao", style = MaterialTheme.typography.bodySmall, color = Secondary)
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Xem thực đơn của quán", tint = Blue)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Xem chi tiết món ăn", tint = Blue)
         }
     }
 }

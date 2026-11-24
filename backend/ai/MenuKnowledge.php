@@ -18,13 +18,109 @@ final class MenuKnowledge {
         return $q->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Dynamically load all active dish categories provided by restaurants in TiDB. */
+    public static function categories(PDO $db,float $ceiling,?string $storeId=null): array {
+        $sql='SELECT mc.name,COUNT(d.id) AS dishes '.self::AVAILABLE.' AND mc.name IS NOT NULL AND TRIM(mc.name)<>\'\'';
+        $params=[$ceiling];
+        if ($storeId!==null) { $sql.=' AND d.store_id=?'; $params[]=$storeId; }
+        $sql.=' GROUP BY mc.name ORDER BY dishes DESC,mc.name ASC';
+        $q=$db->prepare($sql);
+        $q->execute($params);
+        return $q->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Dynamically match a user's request against live restaurant dish categories from DB. */
+    public static function matchedCategories(string $message,array $categories): array {
+        $expanded=class_exists('FoodHubKnowledgeBase')?FoodHubKnowledgeBase::expandVietnamese($message):$message;
+        $text=' '.self::text($expanded).' ';
+        if (trim($text)==='' || !$categories) return [];
+        $exact=[]; $core=[]; $semantic=[];
+        $names=[];
+        foreach ($categories as $c) {
+            $name=trim((string)(is_array($c)?($c['name']??''):$c));
+            if ($name!=='') $names[]=$name;
+        }
+        $names=array_values(array_unique($names));
+
+        foreach ($names as $name) {
+            $norm=self::text($name);
+            if ($norm==='') continue;
+            if (str_contains($text,' '.$norm.' ')) {
+                $exact[]=$name;
+                continue;
+            }
+            $stripped=trim((string)preg_replace('/^(?:mon|nuoc|do|thuc)\s+/','',$norm));
+            if ($stripped!=='' && $stripped!==$norm && mb_strlen($stripped)>=4
+                && !in_array($stripped,['chinh','phu','an','uong'],true)
+                && str_contains($text,' '.$stripped.' ')) {
+                $core[]=$name;
+            }
+        }
+        if ($exact || $core) return array_values(array_unique(array_merge($exact,$core)));
+
+        // Semantic bridge from natural Vietnamese phrasing to live restaurant categories in DB
+        $bridges=[
+            '/\b(giai khat|nuoc ngot|nuoc co ga|khat nuoc)\b/' => '/\b(giai khat|do uong|nuoc uong|thuc uong|nuoc ngot|nuoc ep|tra sua|ca phe)\b/',
+            '/\b(do uong|nuoc uong|thuc uong|uong gi|nuoc mat|tra trai cay)\b/' => '/\b(giai khat|do uong|nuoc uong|thuc uong|tra sua|ca phe|sinh to|nuoc ep|nuoc mat)\b/',
+            '/\b(tra sua|tra dao|tra vai)\b/' => '/\b(tra sua|giai khat|do uong|nuoc uong)\b/',
+            '/\b(ca phe|cafe|coffee)\b/' => '/\b(ca phe|cafe|coffee|do uong|giai khat)\b/',
+            '/\b(an vat|do an vat|nham nhi)\b/' => '/\b(an vat|banh ngot|mon phu)\b/',
+            '/\b(trang mieng|do ngot)\b/' => '/\b(trang mieng|banh ngot|che|sinh to)\b/',
+            '/\b(mon chay|do chay|an chay|thuan chay)\b/' => '/\b(chay)\b/',
+            '/\b(do nuong|mon nuong|nuong)\b/' => '/\b(nuong)\b/',
+            '/\b(hai san|do bien|oc ngon)\b/' => '/\b(hai san)\b/',
+            '/\b(mon han|do han|han quoc)\b/' => '/\b(mon han|han quoc)\b/',
+            '/\b(mon nhat|do nhat|nhat ban)\b/' => '/\b(mon nhat|nhat ban)\b/',
+            '/\b(com tam)\b/' => '/\b(com tam)\b/',
+            '/\b(sinh to)\b/' => '/\b(sinh to)\b/',
+            '/\b(an che|mon che|quan che)\b/' => '/\b(che|trang mieng)\b/',
+        ];
+        foreach ($bridges as $msgPattern=>$catPattern) {
+            if (!preg_match($msgPattern,$text)) continue;
+            foreach ($names as $name) {
+                $norm=' '.self::text($name).' ';
+                if (preg_match($catPattern,$norm)) $semantic[]=$name;
+            }
+            if ($semantic) break;
+        }
+        return array_values(array_unique($semantic));
+    }
+
+    public static function filterByCategories(array $rows,array $matchedCategories): array {
+        if (!$matchedCategories) return $rows;
+        $allowed=[];
+        foreach ($matchedCategories as $c) $allowed[self::text($c)]=true;
+        return array_values(array_filter($rows,static fn($r)=>isset($allowed[self::text((string)($r['category']??''))])));
+    }
+
     public static function text(string $message): string {
         return trim(preg_replace('/[^a-z0-9]+/',' ',MealAdvisor::folded($message)));
     }
 
+    private static function squish(string $text): string {
+        return (string)preg_replace('/([a-z0-9])\1+/u', '$1', str_replace(' ', '', self::text($text)));
+    }
+
     public static function mentionedStores(string $message,array $stores): array {
         $text=' '.self::text($message).' ';
-        return array_values(array_filter($stores,static fn($s)=>str_contains($text,' '.self::text($s['name']).' ')));
+        $squished=self::squish($message);
+        $matched=[];
+        foreach ($stores as $s) {
+            $storeText=self::text($s['name']);
+            if ($storeText==='') continue;
+            if (str_contains($text,' '.$storeText.' ')) { $matched[]=$s; continue; }
+            // Handle double/triple letter typos like "Jollibee" vs "Jolllibee" or spacing like "An Chin" vs "AnChin"
+            $storeSquished=self::squish($s['name']);
+            if (mb_strlen($storeSquished)>=4 && str_contains($squished,$storeSquished)) { $matched[]=$s; continue; }
+            // Handle short brand name without prefix ("AnChin", "Seoul")
+            $short=trim((string)preg_replace('/^(?:nha hang|quan|cua hang|mi cay)\s+/','',$storeText));
+            $shortSquished=self::squish($short);
+            if ($short!=='' && $short!==$storeText && mb_strlen($shortSquished)>=4
+                && (str_contains($text,' '.$short.' ') || str_contains($squished,$shortSquished))) {
+                $matched[]=$s;
+            }
+        }
+        return $matched;
     }
 
     /** Match a browse request only if the other words add no unresolved condition. */
@@ -91,17 +187,60 @@ final class MenuKnowledge {
     }
 
     public static function keywords(string $message): array {
-        $stops=explode(' ','toi minh cho gi mon an cua mot nao cac ban co gia duoi muon thu nhung voi xin hay the la ve nay duoc va nhat hom neu se ngan sach bua trua rang quan nha hang menu thuc don bao nhieu tien phan khau goi y de xuat nguoi trong tu den khong day vay dang tim thich hoi muon biet nhin thay mot chut khong a o tai nhe giup ket cau thi ay foodhub cua hang ngon phu hop mang vi');
+        $stops=explode(' ','toi minh cho gi mon an cua mot nao cac ban co gia duoi muon thu nhung voi xin hay the la ve nay duoc va nhat hom neu se ngan sach bua trua rang quan nha hang menu thuc don bao nhieu tien phan khau goi y de xuat nguoi trong tu den khong day vay dang tim thich hoi muon biet nhin thay mot chut khong a o tai nhe giup ket cau thi ay foodhub cua hang ngon phu hop mang vi tui shop oi');
         $words=preg_split('/[^\p{L}\p{N}]+/u',mb_strtolower($message),-1,PREG_SPLIT_NO_EMPTY);
-        return array_slice(array_values(array_unique(array_filter($words,static fn($w)=>mb_strlen($w)>=2 && !in_array(MealAdvisor::folded($w),$stops,true)))),0,14);
+        $base=array_values(array_unique(array_filter($words,static fn($w)=>mb_strlen($w)>=2 && !in_array(MealAdvisor::folded($w),$stops,true))));
+        $folded=self::text($message);
+        $expansions=[
+            'cay'=>['cay','kim chi','gochujang'],
+            'han quoc'=>['kim chi','tokbokki','bibimbap','seoul'],
+            'mon han'=>['kim chi','tokbokki','bibimbap','seoul'],
+            'an vat'=>['ăn vặt','tokbokki','chuối','gỏi cuốn','nem','phô mai','khoai tây'],
+            'trang mieng'=>['tráng miệng','kem','sundae','xoài','chuối','flan','chè','bánh ngọt','tiramisu'],
+            'ngot'=>['kem','sundae','xoài','chuối','tráng miệng','bánh ngọt','tiramisu','chè'],
+            'giai khat'=>['giải khát','coca','pepsi','7up','trà','nước ép','sâm','sữa đậu nành'],
+            'do uong'=>['giải khát','đồ uống','trà sữa','cà phê','coca','pepsi','trà','nước ép'],
+            'nuoc uong'=>['giải khát','đồ uống','trà sữa','cà phê','coca','pepsi','trà','nước ép'],
+            'uong'=>['giải khát','đồ uống','trà sữa','cà phê','coca','pepsi','trà','nước ép'],
+            'tra sua'=>['trà sữa','matcha','ô long','trân châu'],
+            'ca phe'=>['cà phê','espresso','cà phê muối'],
+            'chay'=>['chay','nấm','đậu hũ','rau củ'],
+            'nuong'=>['nướng','bbq','sườn'],
+            'hai san'=>['hải sản','tôm','cua','mực','ốc','nghêu','sò điệp','hàu'],
+            'mon nhat'=>['nhật','sushi','ramen','udon','takoyaki','mochi'],
+            'nhat ban'=>['nhật','sushi','ramen','udon','takoyaki','mochi'],
+            'com tam'=>['cơm tấm','sườn','bì','chả'],
+            'sinh to'=>['sinh tố','bơ','xoài','dâu'],
+            'che'=>['chè','khúc bạch','bưởi','sầu riêng','hạt sen'],
+            'ga ran'=>['gà giòn','gà sốt','gà popcorn','gà rán'],
+            'nhanh'=>['gà giòn','mì ý','bánh mì','burger','xôi'],
+            'nong'=>['lẩu','mì','bún','phở'],
+            'mon nuoc'=>['bún','mì','phở','lẩu'],
+            'no bung'=>['món chính','cơm','bún','mì','phở','xôi','pizza','burger'],
+            'jollibee'=>['jolllibee'],
+            'jolibee'=>['jolllibee'],
+        ];
+        foreach ($expansions as $trigger=>$extras) {
+            if (str_contains(' '.$folded.' ',' '.$trigger.' ')) {
+                foreach ($extras as $e) {
+                    if (!in_array($e,$base,true)) $base[]=$e;
+                }
+            }
+        }
+        return array_slice($base,0,14);
     }
 
     /** Rank across all eligible rows in SQL before bounding the Gemini context. */
-    public static function candidates(PDO $db,float $ceiling,bool $cheap=false,string $message='',array $refs=[],?string $storeId=null): array {
+    public static function candidates(PDO $db,float $ceiling,bool $cheap=false,string $message='',array $refs=[],?string $storeId=null,array $matchedCategories=[]): array {
         $sql=self::FIELDS.self::AVAILABLE;
         $params=[$ceiling];
         if ($storeId!==null) { $sql.=' AND d.store_id=?'; $params[]=$storeId; }
         $order=[];
+        if ($matchedCategories) {
+            $placeholders=implode(',',array_fill(0,count($matchedCategories),'?'));
+            $order[]='CASE WHEN LOWER(mc.name) IN ('.$placeholders.') THEN 1 ELSE 0 END DESC';
+            foreach ($matchedCategories as $cat) $params[]=mb_strtolower($cat,'UTF-8');
+        }
         if ($refs) {
             $order[]='CASE WHEN d.id IN ('.implode(',',array_fill(0,count($refs),'?')).') THEN 1 ELSE 0 END DESC';
             array_push($params,...$refs);
@@ -119,15 +258,23 @@ final class MenuKnowledge {
     }
 
     public static function wantsMeal(string $message): bool {
-        return (bool)preg_match('/\b(khau phan|suat (?:an|com|trua)|phan an|bua (?:an )?trua|an trua|set an|combo cho (?:mot|1) nguoi)\b/',self::text($message));
+        $text=self::text($message);
+        if (preg_match('/\b([2-9]|[1-9]\d+|hai|ba|bon|nam|sau|nhieu)\s+(nguoi|suat|phan)\b/',$text)) return false;
+        return (bool)preg_match('/\b(khau phan|suat (?:an|com|trua|toi|sang)|phan an|bua (?:an )?(?:trua|toi|sang|chieu)|an (?:trua|toi|sang)|set (?:an|do an|mon)|combo|mon chinh.*mon phu)\b/',$text);
     }
 
-    /** Resolve a budget-only follow-up to the most recent lunch request, preserving its preferences. */
+    /** Resolve a budget-only or "đổi combo khác" follow-up to the most recent meal/combo request. */
     public static function mealQuestion(array $input): string {
         $question=$input['message'];
         if (self::wantsMeal($question) || !$input['history']) return $question;
-        $money='/\b\d+(?:[.,]\d+)*\s*(?:k|nghin|ngan|trieu|tr|d|dong|vnd)\b/u';
         $text=MealAdvisor::folded($question);
+        // Follow-up asking for another combo ("combo khác đi", "đổi gợi ý khác", "còn bữa nào khác không")
+        if (preg_match('/\b(doi|khac|goi y khac|con (?:nao|gi) khac)\b/',$text)) {
+            foreach (array_reverse($input['history']) as $turn) {
+                if (self::wantsMeal($turn['question'])) return $turn['question'];
+            }
+        }
+        $money='/\b\d+(?:[.,]\d+)*\s*(?:k|nghin|ngan|trieu|tr|d|dong|vnd)\b/u';
         if (!preg_match($money,$text)) return $question;
         $left=preg_replace($money,' ',$text);
         $left=preg_replace('/\b(vay|neu|con|chi|co|toi|minh|duoi|toi da|ngan sach|thi sao|thi|duoc khong|nhe|tam|khoang|tang|giam|xuong|len)\b/',' ',$left);
@@ -144,44 +291,76 @@ final class MenuKnowledge {
         $text=MealAdvisor::folded($input['message']);
         foreach (self::mentionedStores($text,$stores) as $store)
             $text=str_replace(MealAdvisor::folded($store['name']),' ',$text);
-        $text=preg_replace('/\b(de xuat|dua ra|tu van|chuan bi|sap xep|len|giup|hay|toi can|khau phan|suat an|phan an|set an|bua an trua|bua trua|an trua|cho toi|cho minh|tai|nha hang|quan|gom phi giao|tinh ca phi giao|tinh ca ship|bao gom phi giao hang|1 nguoi|1|mot)\b/',' ',$text);
-        $text=preg_replace('/\b(thi sao|vay|neu|chi|con|tang|giam|xuong|len|combo)\b/',' ',$text);
+        $text=preg_replace('/\b(de xuat|dua ra|goi y|tu van|chuan bi|sap xep|ghep|len|giup|hay|toi can|minh can|khau phan|suat an|phan an|set an|set do an|set mon|bua an trua|bua trua|bua toi|bua sang|bua chieu|buoi trua|buoi toi|buoi sang|buoi chieu|an trua|an toi|an sang|trua nay|toi nay|sang nay|chieu nay|hom nay|nay|trua|toi|sang|chieu|cho toi|cho minh|cho em|cho anh|cho chi|em|anh|chi|tui|tai|nha hang|quan|gom phi giao|tinh ca phi giao|tinh ca ship|bao gom phi giao hang|bao gom|gom|1 nguoi|1|mot|mon chinh|mon phu|mon an|do an|mon|va|kem|voi|nhe|nha|di|khac|doi|day du|hop ly|tam|khoang|trong|co|cho|cua)\b/',' ',$text);
+        $text=preg_replace('/\b(thi sao|vay|neu|chi|con|tang|giam|xuong|len|combo|set)\b/',' ',$text);
         return MealAdvisor::localIntent(array_merge($input,['message'=>trim($text)]));
     }
 
-    /** Compose one order at one restaurant. Only a main dish is required. */
-    public static function meal(array $rows,float $ceiling,array $intent): array {
+    public static function isSideDish(array $row): bool {
+        $category=self::text((string)($row['category']??''));
+        return (bool)preg_match('/\b(khai vi|trang mieng|mon phu|an vat|do uong|nuoc uong|thuc uong|nuoc giai khat|giai khat|tra sua|ca phe|sinh to|nuoc ep|banh ngot|che)\b/',$category);
+    }
+
+    public static function isMainDish(array $row): bool {
+        if (self::isSideDish($row)) return false;
+        $category=self::text((string)($row['category']??''));
+        $name=self::text((string)($row['name']??''));
+        return (bool)preg_match('/\b(mon chinh|mon chay|do nuong|com tam|mon han|mon nhat|hai san|com|pho|bun|mi|mien|chao|xoi|pizza|burger|banh mi|banh xeo|lau|suon|vit|ga|bibimbap|tokbokki|kimbap|ramen|udon|sushi)\b/',$category.' '.$name);
+    }
+
+    /** Compose one combo at one restaurant: 1 main dish + 1 side dish within ceiling (falls back to 1 main if budget cannot fit a side). */
+    public static function meal(array $rows,float $ceiling,array $intent,array $excludeIds=[]): array {
         if (!$intent['canFilter'] || $intent['unsupported']) return [];
         $rows=MealAdvisor::matchingRows($rows,$intent);
         $mains=[]; $sides=[];
         foreach ($rows as $row) {
             if ((float)$row['price']>$ceiling) continue;
-            $category=self::text((string)$row['category']);
-            $name=self::text($row['name']);
-            if (preg_match('/\b(khai vi|trang mieng|mon phu|do uong|nuoc uong|thuc uong)\b/',$category))
+            if (self::isSideDish($row)) {
                 $sides[$row['store_id']][]=$row;
-            elseif (preg_match('/\b(mon chinh|com|pho|bun|mi|pizza|burger)\b/',$category.' '.$name))
+            } elseif (self::isMainDish($row)) {
                 $mains[]=$row;
+            }
         }
         if (!$mains) return [];
-        if ($intent['cheap']) usort($mains,static fn($a,$b)=>$a['price']<=>$b['price']);
-        foreach ($mains as $main) {
-            if ($intent['cheap']) break;
-            foreach ($sides[$main['store_id']]??[] as $side)
-                if ($main['price']+$side['price']<=$ceiling) return [$main,$side];
+        if ($intent['cheap']) {
+            usort($mains,static fn($a,$b)=>(float)$a['price']<=>(float)$b['price']);
+            foreach ($sides as &$storeSides) {
+                usort($storeSides,static fn($a,$b)=>(float)$a['price']<=>(float)$b['price']);
+            }
+            unset($storeSides);
+        } elseif ($excludeIds) {
+            usort($mains,static fn($a,$b)=>(in_array((string)$a['id'],$excludeIds,true)?1:0)<=>(in_array((string)$b['id'],$excludeIds,true)?1:0));
         }
+
+        // First pass: find 1 main + 1 side at the same store within ceiling (prefer non-excluded combo)
+        $bestPair=null;
+        foreach ($mains as $main) {
+            foreach ($sides[$main['store_id']]??[] as $side) {
+                if ((float)$main['price']+(float)$side['price']<=$ceiling) {
+                    $seenBoth=$excludeIds && in_array((string)$main['id'],$excludeIds,true) && in_array((string)$side['id'],$excludeIds,true);
+                    if (!$seenBoth) return [$main,$side];
+                    if ($bestPair===null) $bestPair=[$main,$side];
+                }
+            }
+        }
+        if ($bestPair!==null) return $bestPair;
         return [$mains[0]];
     }
 
     public static function mealAnswer(array $items,float $fee,bool $includeDelivery): string {
-        $names=[];$total=0;
-        foreach ($items as $item) {
-            $dish=$item['dish'];
-            $names[]='1 phần '.$dish['name'].' ('.self::money($dish['price']).')';
-            $total+=$dish['price'];
+        if (!$items) return 'Mình chưa tìm thấy combo phù hợp trong ngân sách này, bạn thử tăng nhẹ ngân sách hoặc đổi yêu cầu nhé!';
+        $total=0.0;
+        foreach ($items as $item) $total+=(float)$item['dish']['price'];
+        $store=$items[0]['restaurantName'];
+        if (count($items)>=2) {
+            $main=$items[0]['dish'];
+            $side=$items[1]['dish'];
+            $reply='Dạ em gợi ý combo cho mình tại '.$store.' gồm: món chính là '.$main['name'].' ('.self::money((float)$main['price']).') kèm món phụ '.$side['name'].' ('.self::money((float)$side['price']).') nha! Tổng tiền món là '.self::money($total).'.';
+        } else {
+            $main=$items[0]['dish'];
+            $reply='Dạ trong ngân sách này tại '.$store.', em gợi ý 1 phần '.$main['name'].' ('.self::money((float)$main['price']).') ạ. Tổng tiền món là '.self::money($total).'.';
         }
-        $reply='Cho một người, mình gợi ý '.implode(' và ',$names).' tại '.$items[0]['restaurantName'].'. Tổng tiền món '.self::money($total).'.';
-        if ($includeDelivery) $reply.=' Tính một lần phí giao '.self::money($fee).', dự tính '.self::money($total+$fee).'.';
+        if ($includeDelivery) $reply.=' Tính thêm phí giao '.self::money($fee).' nữa là khoảng '.self::money($total+$fee).' ạ.';
         return $reply;
     }
 

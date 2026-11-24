@@ -25,6 +25,8 @@ import com.example.dacs_3_composer.feature.customer.profileRestaurant.components
 import com.example.dacs_3_composer.feature.customer.profileRestaurant.components.RestaurantInfoUserCard
 import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
 import com.example.dacs_3_composer.data.repository.ChatRepository
+import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
+import com.example.dacs_3_composer.feature.shared.location.rememberUserCoordinates
 import kotlinx.coroutines.launch
 
 @Composable
@@ -38,12 +40,16 @@ fun RestaurantDetailScreen(
     cartViewModel: CartViewModel = viewModel()
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val userCoords = rememberUserCoordinates()
 
     LaunchedEffect(restaurantId) {
         viewModel.fetchStoreDataForUser(restaurantId)
     }
 
-    val restaurant = viewModel.restaurantDetail.value
+    val rawRestaurant = viewModel.restaurantDetail.value
+    val restaurant = remember(rawRestaurant, userCoords) {
+        rawRestaurant?.let { DeliveryEstimate.enrichRestaurant(it, userCoords?.first, userCoords?.second) }
+    }
     val dishes = viewModel.dishesList.value
 
     LaunchedEffect(restaurant) {

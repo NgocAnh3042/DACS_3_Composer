@@ -16,10 +16,12 @@ import com.example.dacs_3_composer.feature.restaurant.home.components.WeeklyReve
 @Composable
 fun RestaurantHomeScreen(
     onMessageClick: () -> Unit,
+    onRevenueDetailClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     homeViewModel: RestaurantHomeViewModel = viewModel()
 ) {
     val topDishesList by homeViewModel.topDishes.collectAsState()
+    val ordersList by homeViewModel.orders.collectAsState()
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -35,11 +37,22 @@ fun RestaurantHomeScreen(
         }
         item { GreetingSection() }
 
-        item { RevenueCard(revenue = homeViewModel.totalRevenue) }
+        item {
+            RevenueCard(
+                revenue = homeViewModel.totalRevenue,
+                onClick = onRevenueDetailClick
+            )
+        }
 
         item { StatsMiniCardRow(totalOrders = homeViewModel.totalOrdersCount) }
 
-        item { WeeklyRevenueCard(chartWeights = homeViewModel.weeklyChartData) }
+        item {
+            WeeklyRevenueCard(
+                chartWeights = homeViewModel.weeklyChartData,
+                orders = ordersList,
+                onDetailClick = onRevenueDetailClick
+            )
+        }
 
         item { TopDishesSectionTitle() }
 

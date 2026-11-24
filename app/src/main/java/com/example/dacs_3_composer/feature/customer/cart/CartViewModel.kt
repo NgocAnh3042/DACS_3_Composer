@@ -133,16 +133,20 @@ class CartViewModel : ViewModel() {
         }
     }
 
-    fun addToCart(dish: DishItem) {
+    fun addToCart(dish: DishItem, quantity: Int = 1) {
+        val safeQty = quantity.coerceAtLeast(1)
         if (dish.restaurantId.isNotBlank()) {
             this.currentRestaurantId = dish.restaurantId
+        }
+        if (dish.restaurantName.isNotBlank()) {
+            this.currentRestaurantName = dish.restaurantName
         }
         val existingItem = cartItems.find { it.dish.id == dish.id }
         if (existingItem != null) {
             val index = cartItems.indexOf(existingItem)
-            cartItems[index] = existingItem.copy(quantity = existingItem.quantity + 1)
+            cartItems[index] = existingItem.copy(quantity = existingItem.quantity + safeQty)
         } else {
-            cartItems.add(CartItem(dish = dish, quantity = 1))
+            cartItems.add(CartItem(dish = dish, quantity = safeQty))
         }
     }
 

@@ -27,7 +27,8 @@ final class MealChat {
 
     /** Understand common factual questions locally, even during a provider outage. */
     public static function lookup(string $message,array $rows,array $history): ?array {
-        $text=trim(preg_replace('/[^a-z0-9 ]+/',' ',MealAdvisor::folded($message)));
+        $expanded=class_exists('FoodHubKnowledgeBase')?FoodHubKnowledgeBase::expandVietnamese($message):$message;
+        $text=trim(preg_replace('/[^a-z0-9 ]+/',' ',MealAdvisor::folded($expanded)));
         $text=trim(preg_replace('/\s+/',' ',$text));
         if (preg_match('/^(xin chao|chao ban|hello|hi|cam on|cam on ban)$/',$text) || mb_strtolower(trim($message," !?."))==='chào')
             return ['kind'=>'greeting','rows'=>[]];
@@ -48,9 +49,9 @@ final class MealChat {
 
         // Consume the entire question. A leftover condition must go to Gemini.
         $kind='suggest'; $rest=$text;
-        foreach (['price'=>'gia bao nhieu|bao nhieu tien|bao nhieu|gia cua|gia',
-                  'store'=>'ban o quan nao|cua quan nao|o quan nao|quan nao ban',
-                  'detail'=>'mo ta|co gi trong|gom nhung gi|co nhung gi|thanh phan',
+        foreach (['price'=>'gia bao nhieu|bao nhieu tien|bao nhieu vay|gia sao|bao nhieu|gia cua|gia',
+                  'store'=>'ban o quan nao|cua quan nao|o quan nao|quan nao ban|o dau ban',
+                  'detail'=>'mo ta|co gi ben trong|co gi trong|gom nhung gi|co nhung gi|thanh phan|gom gi',
                   'compare'=>'so sanh'] as $action=>$pattern) {
             if (preg_match('/\b('.$pattern.')\b/',$rest)) {
                 $rest=preg_replace('/\b('.$pattern.')\b/',' ',$rest);
@@ -73,16 +74,22 @@ final class MealChat {
             }
         }
         $ambiguous=false;
-        foreach (['mon dau tien|mon thu nhat|mon dau|mon thu 1'=>0,'mon thu hai|mon thu 2'=>1,'mon thu ba|mon thu 3'=>2,
-                  'mon thu tu|mon thu bon|mon thu 4'=>3,'mon thu nam|mon thu 5'=>4,'mon thu sau|mon thu 6'=>5,
-                  'mon thu bay|mon thu 7'=>6,'mon thu tam|mon thu 8'=>7,'mon cuoi cung|mon cuoi'=>count($prior)-1,
-                  'mon nay|mon do|mon ay'=>count($prior)===1?0:-1] as $reference=>$index) {
+        foreach (['(?:mon|cai|phan|ly|to) dau tien|(?:mon|cai|phan|ly|to) thu nhat|(?:mon|cai|phan|ly|to) dau|(?:mon|cai|phan|ly|to) thu 1'=>0,
+                  '(?:mon|cai|phan|ly|to) thu hai|(?:mon|cai|phan|ly|to) thu 2'=>1,
+                  '(?:mon|cai|phan|ly|to) thu ba|(?:mon|cai|phan|ly|to) thu 3'=>2,
+                  '(?:mon|cai|phan|ly|to) thu tu|(?:mon|cai|phan|ly|to) thu bon|(?:mon|cai|phan|ly|to) thu 4'=>3,
+                  '(?:mon|cai|phan|ly|to) thu nam|(?:mon|cai|phan|ly|to) thu 5'=>4,
+                  '(?:mon|cai|phan|ly|to) thu sau|(?:mon|cai|phan|ly|to) thu 6'=>5,
+                  '(?:mon|cai|phan|ly|to) thu bay|(?:mon|cai|phan|ly|to) thu 7'=>6,
+                  '(?:mon|cai|phan|ly|to) thu tam|(?:mon|cai|phan|ly|to) thu 8'=>7,
+                  '(?:mon|cai|phan|ly|to) cuoi cung|(?:mon|cai|phan|ly|to) cuoi'=>count($prior)-1,
+                  '(?:mon|cai|phan|ly|to) (?:nay|do|ay|vua nay)'=>count($prior)===1?0:-1] as $reference=>$index) {
             if (!preg_match('/\b('.$reference.')\b/',$rest)) continue;
             $rest=preg_replace('/\b('.$reference.')\b/',' ',$rest);
             if (isset($prior[$index],$byId[$prior[$index]])) $selected[]=$byId[$prior[$index]];
             else $ambiguous=true;
         }
-        $left=preg_replace('/\b(cho minh|cho toi|goi y|toi muon|minh muon|muon an|toi|minh|mon|an|voi|va|co|khong a|khong|la|nhe|a)\b/',' ',$rest);
+        $left=preg_replace('/\b(cho minh|cho toi|goi y|toi muon|minh muon|muon an|toi|minh|mon|an|voi|va|co|khong a|khong|la|nhe|nha|vay|the|con|ua|shop|oi|em|a)\b/',' ',$rest);
         // Never turn a negation ("không ăn ...") into a positive match.
         $assertion=preg_replace('/\s+khong(?: a)?$/','',$text);
         if (trim($left)!=='' || preg_match('/\b(khong|tranh|kieng|tru)\b/',$assertion)) return null;
@@ -92,26 +99,26 @@ final class MealChat {
     }
 
     public static function answer(string $kind,array $items): string {
-        if ($kind==='greeting') return 'Chào bạn! Bạn muốn xem thực đơn, tìm món theo giá hay hỏi về một món cụ thể?';
-        if ($kind==='end') return 'Bạn đã xem hết các món trong phần thực đơn này.';
-        if ($kind==='clarify' || !$items) return 'Bạn muốn hỏi về món nào? Bạn có thể nhắn tên món hoặc nói “món đầu tiên” sau khi xem gợi ý.';
+        if ($kind==='greeting') return 'Chào mình nha! Mình muốn xem thực đơn, tìm món theo gu & ngân sách hay hỏi về món cụ thể nào ạ?';
+        if ($kind==='end') return 'Mình đã xem hết các món trong phần thực đơn này rồi ạ. Mình có muốn tìm theo món cụ thể hay đổi ngân sách không nha?';
+        if ($kind==='clarify' || !$items) return 'Mình muốn hỏi về món nào ạ? Mình có thể nhắn tên món hoặc nói “món đầu tiên” sau khi xem gợi ý nha.';
         $facts=[];
         foreach ($items as $item) {
             $dish=$item['dish'];
             $price=number_format($dish['price'],0,',','.').'đ';
             $facts[]=match ($kind) {
-                'detail'=>trim($dish['description'])!=='' ? $dish['name'].' — quán mô tả: '.mb_substr(trim($dish['description']),0,200) : 'Quán chưa bổ sung mô tả cho '.$dish['name'].'.',
-                'store'=>$dish['name'].' đang bán tại '.$item['restaurantName'].'.',
+                'detail'=>trim($dish['description'])!=='' ? $dish['name'].' ('.$price.', '.$item['restaurantName'].') — quán mô tả: '.mb_substr(trim($dish['description']),0,200) : 'Quán chưa bổ sung mô tả cho '.$dish['name'].'.',
+                'store'=>$dish['name'].' hiện đang bán tại '.$item['restaurantName'].' với giá '.$price.'.',
                 default=>$dish['name'].' ('.$price.')'
             };
         }
         if (in_array($kind,['detail','store'],true)) return implode("\n",$facts);
         $prefix=match ($kind) {
-            'price'=>'Giá trên thực đơn là ',
-            'menu'=>'Trong thực đơn đang bán có ',
-            'evidence'=>'Mình tìm thấy những món sau theo thông tin quán đã đăng: ',
-            'compare'=>'Để bạn so sánh giá món: ',
-            default=>'Mình gợi ý bạn thử '
+            'price'=>'Dạ giá hiện tại trên thực đơn là ',
+            'menu'=>'Dạ thực đơn đang bán có ',
+            'evidence'=>'Dạ em tìm thấy mấy món khớp yêu cầu của mình nè: ',
+            'compare'=>'Để mình dễ so sánh giá nhé: ',
+            default=>'Dạ em gợi ý mình thử '
         };
         return $prefix.implode(', ',$facts).'.';
     }
@@ -132,9 +139,16 @@ final class MealChat {
             $tokens['{mon:'.$id.'}']=$dish['name'];
             $tokens['{gia:'.$id.'}']=number_format($dish['price'],0,',','.').'đ';
             $tokens['{quan:'.$id.'}']=$item['restaurantName'];
+            if (!isset($tokens['{tenquan:'.$id.'}'])) $tokens['{tenquan:'.$id.'}']=$item['restaurantName'];
         }
         $literal=str_replace(array_keys($tokens),'',$reply,$references);
-        if (preg_match('/[{}\d<>]|https?:|www\./ui',$literal)) return null;
+        if (preg_match('/[{}<>]|https?:|www\./ui',$literal)) return null;
+        $foldedLiteral=MealAdvisor::folded($literal);
+        // Never allow model-invented currency/price amounts outside {gia:ID}/{mingia:ID}/{maxgia:ID}
+        if (preg_match('/\d+(?:[.,]\d+)*\s*(?:d\b|dong|vnd|k\b|nghin|ngan|trieu|tr\b)/ui',$foldedLiteral)) return null;
+        // Allow small portion/item counts (e.g., "1 phan", "2 mieng", "1 nuoc ngot", "1 nguoi") from dish descriptions
+        $withoutCounts=preg_replace('/\b[1-9]\s*(?:phan|mieng|mon|nguoi|ly|coc|to|bat|dia|goi|nuoc|tuong|khoai|chai|hop|cai|suat|com|mi|ga)\b/ui','',$foldedLiteral);
+        if (preg_match('/\d/',$withoutCounts)) return null;
         if (!$references && !($clarify && str_ends_with($reply,'?'))) return null;
         return strtr($reply,$tokens);
     }
