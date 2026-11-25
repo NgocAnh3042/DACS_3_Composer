@@ -24,20 +24,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.R
 import com.example.dacs_3_composer.core.model.NotificationItem
 import com.example.dacs_3_composer.data.remote.FoodHubClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.example.dacs_3_composer.feature.customer.home.HomeViewModel // 🌟 Thêm import này
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
     modifier: Modifier = Modifier,
-    homeViewModel: HomeViewModel = viewModel() // 🌟 Lấy dữ liệu User dùng chung từ HomeViewModel đã load sẵn
+    homeViewModel: HomeViewModel = hiltViewModel()
 ) {
     // Tự động load lại thông tin user nếu cần thiết
     LaunchedEffect(Unit) {
@@ -45,8 +46,9 @@ fun NotificationScreen(
     }
 
     // Lấy thông tin động từ ViewModel
-    val currentUserName = homeViewModel.userName.ifBlank { "Khách" }
-    val currentUserImageUrl = homeViewModel.userImageUrl
+    val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val currentUserName = homeUiState.userName.ifBlank { "Khách" }
+    val currentUserImageUrl = homeUiState.userImageUrl
 
     var notifications by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
     val scope = rememberCoroutineScope()

@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.dacs_3_composer.R
-import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeViewModel
 import java.util.Locale
 
 private val CategoryBlue = Color(0xFF2159BC)

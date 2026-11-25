@@ -2,6 +2,13 @@
 
 Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
 
+## Refactor Android — customer home presentation — 26/11/2026
+
+- `HomeScreen` và `HomeViewModel` nằm trong `feature/customer/home/presentation/`; `home/components/` vẫn giữ nguyên vì được tái sử dụng.
+- Hilt tạo HomeViewModel và cấp RecommendationRepository/FirebaseAuth. `HomeUiState` gom feed món, quán, category, lọc, thông tin người dùng/địa chỉ và loading; HomeScreen, notification và route phụ cập nhật theo state lifecycle.
+- Logic nghiệp vụ và backend không đổi. Hồ sơ/địa chỉ/quán/món vẫn lấy qua `FoodHubClient`, sẽ tách repository/use case trong giai đoạn tiếp.
+- Cập nhật import test `HomeFeedCompositionTest`; build `assembleDebug` và unit tests cho hai flavor đều thành công. Chưa test trên thiết bị.
+
 ## Refactor Android — customer search presentation — 26/11/2026
 
 - `SearchScreen` và `SearchViewModel` nằm trong `feature/customer/search/presentation/`; component dùng chung ở `search/components/` được giữ do HomeScreen cũng dùng.

@@ -3,6 +3,7 @@ package com.example.dacs_3_composer.feature.customer.home
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.repository.PersonalizedDish
 import com.example.dacs_3_composer.data.repository.PersonalizedRecommendationsResult
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

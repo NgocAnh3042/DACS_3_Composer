@@ -2,11 +2,10 @@ package com.example.dacs_3_composer.feature.customer
 
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.AllDishesScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +14,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -24,7 +25,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.example.dacs_3_composer.R
 import com.example.dacs_3_composer.core.model.Restaurant
-import com.example.dacs_3_composer.feature.customer.home.HomeScreen
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeScreen
 import com.example.dacs_3_composer.feature.customer.order.OrderScreen
 import com.example.dacs_3_composer.feature.customer.order.OrderDetailScreen
 import com.example.dacs_3_composer.feature.customer.order.OrderViewModel
@@ -108,15 +109,16 @@ fun MainRouteContainerUser(
                 }
                 composable("all_dishes") { entry ->
                     val home = remember(entry) { navController.getBackStackEntry("home") }
-                    val model: HomeViewModel = viewModel(viewModelStoreOwner = home)
-                    val dishes by model.deliciousDishes.collectAsState()
-                    val categories by model.categories.collectAsState()
-                    val selectedCategory by model.selectedCategory.collectAsState()
+                    val model: HomeViewModel = hiltViewModel(viewModelStoreOwner = home)
+                    val homeUiState by model.uiState.collectAsStateWithLifecycle()
+                    val dishes = homeUiState.deliciousDishes
+                    val categories = homeUiState.categories
+                    val selectedCategory = homeUiState.selectedCategory
                     LaunchedEffect(model) { model.ensureDishes() }
                     AllDishesScreen(
                         dishes = dishes,
-                        loading = model.dishesLoading,
-                        failed = model.dishesFailed,
+                        loading = homeUiState.dishesLoading,
+                        failed = homeUiState.dishesFailed,
                         onRetry = model::ensureDishes,
                         onBack = { navController.popBackStack() },
                         categories = categories,
@@ -132,12 +134,12 @@ fun MainRouteContainerUser(
                 ) { entry ->
                     val dishId = entry.arguments?.getString("dishId") ?: ""
                     val homeEntry = remember(entry) { runCatching { navController.getBackStackEntry("home") }.getOrNull() }
-                    val homeModel: HomeViewModel? = homeEntry?.let { viewModel(viewModelStoreOwner = it) }
+                    val homeModel: HomeViewModel? = homeEntry?.let { hiltViewModel(viewModelStoreOwner = it) }
                     val initialDish = remember(dishId, homeModel, selectedAiDish) {
                         homeModel?.findDishById(dishId) ?: selectedAiDish?.takeIf { it.id == dishId }
                     }
                     val initialRestaurant = remember(initialDish, homeModel) {
-                        initialDish?.let { d -> homeModel?.restaurantsList?.value?.firstOrNull { it.id == d.restaurantId } }
+                        initialDish?.let { d -> homeModel?.uiState?.value?.restaurantsList?.firstOrNull { it.id == d.restaurantId } }
                     }
                     val relatedDishes = remember(initialDish, homeModel) {
                         initialDish?.let { d -> homeModel?.dishesOfRestaurant(d.restaurantId, d.id) }.orEmpty()

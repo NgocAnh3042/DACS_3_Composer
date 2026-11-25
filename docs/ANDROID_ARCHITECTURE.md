@@ -1,6 +1,6 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Network/config, domain, DTO/error, Hilt, auth presentation và customer search presentation đã qua build/unit test; các feature khác vẫn chưa chuyển.
+Cập nhật: 26/11/2026. Network/config, domain, DTO/error, Hilt và các lát auth, customer search/home presentation đã qua build/unit test; các feature khác vẫn chưa chuyển.
 
 ## Hiện trạng
 
@@ -28,7 +28,7 @@ flowchart TD
     Repo --> External[Cloudinary / API dịch vụ ngoài]
 ```
 
-Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho lịch sử tìm kiếm; auth và customer search dùng `StateFlow<UiState>`, auth phát one-shot events. `di/` cung cấp Hilt cho các ViewModel đã migrate; phần lớn feature khác chưa theo một đường truy cập dữ liệu duy nhất.
+Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho lịch sử tìm kiếm; auth, customer search và customer home dùng `StateFlow<UiState>`, auth phát one-shot events. `di/` cung cấp Hilt cho các ViewModel đã migrate; phần lớn feature khác chưa theo một đường truy cập dữ liệu duy nhất.
 
 Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. `FoodHubClient` vẫn phục vụ caller cũ và cả truy vấn danh sách quán/món ở SearchViewModel; lịch sử tìm kiếm riêng đi qua DTO/mapper/repository. Hilt tạo SearchViewModel/AuthViewModel và cấp use case/repository cho lịch sử tìm kiếm. AuthViewModel vẫn gọi Firebase/API trực tiếp; tách các use case/repository khác sẽ làm theo từng feature.
 

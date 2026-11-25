@@ -122,3 +122,10 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Gom kết quả nhà hàng, món ăn và trạng thái tải vào `SearchUiState`; `SearchScreen` thu thập state bằng `collectAsStateWithLifecycle`. SearchViewModel vẫn do Hilt tạo.
 - Chưa chuyển tải danh sách quán/món sang domain repository/use case: hai truy vấn vẫn dùng `FoodHubClient` để giữ phạm vi nhỏ; lịch sử tìm kiếm tiếp tục qua use case/DTO/repository đã tách ở G2–G4.
 - Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa thử luồng tìm kiếm trên thiết bị.
+
+## 12. Giai đoạn 5 — customer home presentation (26/11/2026)
+
+- Chuyển `HomeScreen` và `HomeViewModel` vào `feature/customer/home/presentation/`; các component được giữ ở `home/components/` vì nhiều màn hình dùng chung.
+- Hilt tạo HomeViewModel và cung cấp RecommendationRepository/FirebaseAuth. Gom danh sách quán/món, bộ lọc, thông tin hồ sơ/địa chỉ và trạng thái tải vào `HomeUiState`; HomeScreen, NotificationScreen và các route dùng `collectAsStateWithLifecycle` hoặc state snapshot.
+- Giữ logic lọc danh mục, cá nhân hóa feed, nạp địa chỉ và API hiện tại. HomeViewModel vẫn gọi `FoodHubClient` cho hồ sơ/địa chỉ/quán/món; chuyển các thao tác này sang repository/use case còn lại cho giai đoạn sau.
+- Cập nhật `HomeFeedCompositionTest` sang vị trí mới của HomeViewModel. Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa chạy trên điện thoại.

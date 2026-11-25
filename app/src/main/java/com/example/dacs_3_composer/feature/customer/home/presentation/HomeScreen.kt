@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.customer.home
+package com.example.dacs_3_composer.feature.customer.home.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.*
@@ -48,16 +49,17 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onNavigateToSearch: (String) -> Unit,
     onNavigateToChat: () -> Unit,
-    homeViewModel: HomeViewModel = viewModel(),
+    homeViewModel: HomeViewModel = hiltViewModel(),
     cartViewModel: CartViewModel = viewModel()
 ) {
-    val dishes by homeViewModel.deliciousDishes.collectAsState()
-    val restaurants by homeViewModel.restaurantsList.collectAsState()
-    val isLoading by homeViewModel.isLoading.collectAsState()
-    val personalizedIds by homeViewModel.personalizedDishIds.collectAsState()
-    val isPersonalizedFeed by homeViewModel.isPersonalizedFeed.collectAsState()
-    val categories by homeViewModel.categories.collectAsState()
-    val selectedCategory by homeViewModel.selectedCategory.collectAsState()
+    val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val dishes = homeUiState.deliciousDishes
+    val restaurants = homeUiState.restaurantsList
+    val isLoading = homeUiState.isLoading
+    val personalizedIds = homeUiState.personalizedDishIds
+    val isPersonalizedFeed = homeUiState.isPersonalizedFeed
+    val categories = homeUiState.categories
+    val selectedCategory = homeUiState.selectedCategory
     val userCoords = rememberUserCoordinates(requestPermissionIfNeeded = true)
 
     var showAllCategoriesSheet by remember { mutableStateOf(false) }
@@ -102,9 +104,9 @@ fun HomeScreen(
     ) {
         item {
             Header(
-                userName = homeViewModel.userName,
-                userAddress = homeViewModel.userAddress,
-                userImageUrl = homeViewModel.userImageUrl,
+                userName = homeUiState.userName,
+                userAddress = homeUiState.userAddress,
+                userImageUrl = homeUiState.userImageUrl,
                 onSearchAction = { query ->
                     onNavigateToSearch(query)
                 },
@@ -138,7 +140,7 @@ fun HomeScreen(
                 categories = categories,
                 totalDishCount = dishes.size,
                 selectedCategory = selectedCategory,
-                isLoading = homeViewModel.dishesLoading && categories.isEmpty(),
+                isLoading = homeUiState.dishesLoading && categories.isEmpty(),
                 onCategoryClick = { categoryName ->
                     homeViewModel.toggleCategory(categoryName)
                 },
@@ -191,7 +193,7 @@ fun HomeScreen(
                 } else {
                     IconButton(
                         onClick = { homeViewModel.refreshDeliciousDishes() },
-                        enabled = !homeViewModel.dishesLoading
+                        enabled = !homeUiState.dishesLoading
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
@@ -206,7 +208,7 @@ fun HomeScreen(
             }
         }
 
-        if (homeViewModel.dishesLoading && dishes.isEmpty()) {
+        if (homeUiState.dishesLoading && dishes.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color(0xFF2159BC))

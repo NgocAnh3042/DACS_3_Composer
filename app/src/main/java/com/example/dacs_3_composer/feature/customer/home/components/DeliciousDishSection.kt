@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.dacs_3_composer.core.model.Dish
-import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
+import com.example.dacs_3_composer.feature.customer.home.presentation.HomeViewModel
 
 private val MenuBlue = Color(0xFF2159BC)
 private val MenuSoftBlue = Color(0xFFEAF2FA)
