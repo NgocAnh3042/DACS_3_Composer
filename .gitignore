@@ -16,3 +16,8 @@ local.properties
 /secrets.properties
 /backend.local.properties
 /backenddd/config.local.php
+.codex-gradle-home/
+backend/.codex-gradle-home/
+backend/build/
+backend/.gradle/
+.idea/
