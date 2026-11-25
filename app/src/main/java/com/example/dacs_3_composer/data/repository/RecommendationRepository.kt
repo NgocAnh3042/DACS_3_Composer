@@ -2,6 +2,10 @@ package com.example.dacs_3_composer.data.repository
 
 import android.util.Log
 import com.example.dacs_3_composer.core.model.Dish
+import com.example.dacs_3_composer.core.common.Result as AppResult
+import com.example.dacs_3_composer.data.mapper.ErrorMapper
+import com.example.dacs_3_composer.data.mapper.toDto
+import com.example.dacs_3_composer.data.mapper.toDomainResult
 import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.example.dacs_3_composer.domain.model.SearchQuery
 import com.example.dacs_3_composer.domain.repository.SearchHistoryRepository
@@ -10,6 +14,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 data class PersonalizedDish(
     val dish: Dish,
@@ -48,30 +53,36 @@ class RecommendationRepository : SearchHistoryRepository {
      * Swallows network failures so normal food search is never interrupted.
      */
     suspend fun recordSearchHistory(query: String): Boolean {
-        val cleaned = query.trim()
-        if (cleaned.length < 2 || FirebaseAuth.getInstance().currentUser == null) return false
-        return try {
-            val payload = JsonObject().apply { addProperty("query", cleaned) }
-            val response = FoodHubClient.api.create("search/history", payload)
-            if (response.isSuccessful) {
-                val recorded = response.body()
-                    ?.getAsJsonObject("data")
-                    ?.get("recorded")
-                    ?.asBoolean ?: false
-                if (recorded) RecommendationRefreshBus.markDirty()
-                recorded
-            } else {
-                Log.w("RecommendationRepo", "Ghi lịch sử tìm kiếm thất bại: HTTP ${response.code()}")
-                false
-            }
-        } catch (e: Exception) {
-            Log.w("RecommendationRepo", "Không thể lưu lịch sử tìm kiếm: ${e.message}")
-            false
+        return when (val result = recordSearchQuery(SearchQuery(query.trim()))) {
+            is AppResult.Success -> result.value
+            is AppResult.Error, AppResult.Loading -> false
         }
     }
 
-    override suspend fun recordSearchQuery(query: SearchQuery): Boolean =
-        recordSearchHistory(query.text)
+    override suspend fun recordSearchQuery(query: SearchQuery): AppResult<Boolean> {
+        val cleaned = query.text.trim()
+        if (cleaned.length < 2 || FirebaseAuth.getInstance().currentUser == null) {
+            return AppResult.Success(false)
+        }
+        return try {
+            val response = FoodHubClient.searchHistoryApi.recordSearchHistory(
+                query.copy(text = cleaned).toDto()
+            )
+            if (!response.isSuccessful) {
+                Log.w("RecommendationRepo", "Ghi lịch sử tìm kiếm thất bại: HTTP ${response.code()}")
+                AppResult.Error(ErrorMapper.fromHttpError(response.code(), response.errorBody()?.string()))
+            } else {
+                val recorded = response.body()?.data?.toDomainResult() ?: false
+                if (recorded) RecommendationRefreshBus.markDirty()
+                AppResult.Success(recorded)
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w("RecommendationRepo", "Không thể lưu lịch sử tìm kiếm (${error.javaClass.simpleName})")
+            AppResult.Error(ErrorMapper.fromThrowable(error))
+        }
+    }
 
     suspend fun getPersonalizedRecommendations(limit: Int = 10): PersonalizedRecommendationsResult {
         if (FirebaseAuth.getInstance().currentUser == null) {

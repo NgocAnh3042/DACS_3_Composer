@@ -129,6 +129,7 @@ object FoodHubClient {
     val authApi: AuthApi by lazy { retrofit.create(AuthApi::class.java) }
     val orderApi: OrderApi by lazy { retrofit.create(OrderApi::class.java) }
     val restaurantApi: RestaurantApi by lazy { retrofit.create(RestaurantApi::class.java) }
+    val searchHistoryApi: SearchHistoryApi by lazy { retrofit.create(SearchHistoryApi::class.java) }
     val api: FoodHubApi by lazy { retrofit.create(FoodHubApi::class.java) }
 
     suspend fun <T> listTyped(resource: String, itemClass: Class<T>, filters: Map<String, String>): List<T> {

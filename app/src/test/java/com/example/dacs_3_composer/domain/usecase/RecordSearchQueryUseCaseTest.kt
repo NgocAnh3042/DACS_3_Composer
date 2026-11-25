@@ -4,7 +4,6 @@ import com.example.dacs_3_composer.core.common.AppError
 import com.example.dacs_3_composer.core.common.Result as AppResult
 import com.example.dacs_3_composer.domain.model.SearchQuery
 import com.example.dacs_3_composer.domain.repository.SearchHistoryRepository
-import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -12,24 +11,22 @@ import org.junit.Test
 class RecordSearchQueryUseCaseTest {
     @Test
     fun `returns repository result`() = runBlocking {
-        val useCase = RecordSearchQueryUseCase(FakeSearchHistoryRepository(result = true))
+        val useCase = RecordSearchQueryUseCase(FakeSearchHistoryRepository(result = AppResult.Success(true)))
 
         assertEquals(AppResult.Success(true), useCase("phở"))
     }
 
     @Test
-    fun `maps io failure to network error`() = runBlocking {
-        val useCase = RecordSearchQueryUseCase(FakeSearchHistoryRepository(error = IOException("offline")))
+    fun `passes repository error to caller`() = runBlocking {
+        val useCase = RecordSearchQueryUseCase(FakeSearchHistoryRepository(result = AppResult.Error(AppError.Network("offline"))))
 
         assertEquals(AppResult.Error(AppError.Network("offline")), useCase("phở"))
     }
 
     private class FakeSearchHistoryRepository(
-        private val result: Boolean = false,
-        private val error: Exception? = null
+        private val result: AppResult<Boolean>
     ) : SearchHistoryRepository {
-        override suspend fun recordSearchQuery(query: SearchQuery): Boolean {
-            error?.let { throw it }
+        override suspend fun recordSearchQuery(query: SearchQuery): AppResult<Boolean> {
             return result
         }
     }

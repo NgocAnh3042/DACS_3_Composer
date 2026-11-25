@@ -9,7 +9,11 @@ sealed interface Result<out T> {
 sealed interface AppError {
     data class Network(val message: String? = null) : AppError
     data object Unauthorized : AppError
-    data class Validation(val message: String) : AppError
-    data class Server(val code: Int? = null, val message: String? = null) : AppError
+    data class Validation(val message: String, val details: List<String> = emptyList()) : AppError
+    data class Server(
+        val code: Int? = null,
+        val message: String? = null,
+        val details: List<String> = emptyList()
+    ) : AppError
     data class Unknown(val message: String? = null) : AppError
 }

@@ -92,3 +92,10 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Thêm `core/common/Result.kt` và `AppError` (`Network`, `Unauthorized`, `Validation`, `Server`, `Unknown`). Use case giữ cancellation, ánh xạ lỗi dự kiến sang `Result`; repository hiện vẫn bắt lỗi mạng và trả `false` như trước.
 - Thêm hai unit test cho kết quả thành công và ánh xạ IOException. `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công.
 - Còn lại có chủ đích: đây mới là một luồng mẫu; các luồng khác sẽ được chuyển dần ở giai đoạn tiếp theo. Chưa chạy trên thiết bị.
+
+## 8. Giai đoạn 3 — DTO và ánh xạ lỗi (26/11/2026)
+
+- Tách DTO request/response, `SearchHistoryApi` và mapper cho API ghi lịch sử tìm kiếm; các endpoint khác tiếp tục dùng contract hiện tại. Repository giữ wrapper Boolean cũ, còn luồng use case nhận `Result<Boolean>`.
+- `ErrorMapper` chuyển `HttpException`, `IOException` và payload lỗi HTTP thành `AppError`; hỗ trợ payload PHP `error` lẫn payload `code/message/details`. Không ghi body lỗi vào log.
+- Thêm test ErrorMapper cho IOException, lỗi PHP 422 và HttpException 503; thêm test mapper request/result.
+- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công. Chưa chạy trên điện thoại.

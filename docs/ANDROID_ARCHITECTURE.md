@@ -1,6 +1,6 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Giai đoạn 1 network và Giai đoạn 2 domain cho lịch sử tìm kiếm đã qua build/unit test; các luồng còn lại bên dưới là mục tiêu chưa triển khai.
+Cập nhật: 26/11/2026. Giai đoạn 1 network, Giai đoạn 2 domain và Giai đoạn 3 DTO/error cho luồng lịch sử tìm kiếm đã qua build/unit test; các luồng khác bên dưới vẫn chưa chuyển.
 
 ## Hiện trạng
 
@@ -19,6 +19,9 @@ flowchart TD
     Client --> Network[NetworkModule: OkHttp + Retrofit]
     Network --> Groups[AuthApi / OrderApi / RestaurantApi; FoodHubApi cũ vẫn giữ]
     Groups -->|Firebase ID token + URL theo flavor| PHP[PHP API: Alwaysdata hoặc local qua ngrok]
+    PHP --> Groups
+    Groups --> Mapping[SearchHistory DTO + mapper/ErrorMapper]
+    Mapping --> Impl
     PHP --> DB[(TiDB Cloud)]
     VM --> Firebase[Firebase Auth / Realtime Database / FCM]
     Repo --> External[Cloudinary / API dịch vụ ngoài]
@@ -26,7 +29,7 @@ flowchart TD
 
 Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain hiện có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho một luồng; `di/` và `data/mapper/` vẫn rỗng; không có Hilt; Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
 
-Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi.
+Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi. DTO/mapper/ErrorMapper hiện đang được thêm cho riêng luồng lịch sử tìm kiếm; các API cũ chưa được chuyển.
 
 ## Đích sau refactor (chưa triển khai)
 

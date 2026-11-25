@@ -1,6 +1,9 @@
 package com.example.dacs_3_composer.data.remote
 
 import com.google.gson.JsonObject
+import com.example.dacs_3_composer.data.remote.dto.ApiEnvelopeDto
+import com.example.dacs_3_composer.data.remote.dto.SearchHistoryRecordDto
+import com.example.dacs_3_composer.data.remote.dto.SearchHistoryRequestDto
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -54,4 +57,11 @@ interface RestaurantApi {
 
     @PATCH("dishes/{id}")
     suspend fun updateDish(@Path("id") id: String, @Body payload: JsonObject): Response<JsonObject>
+}
+
+interface SearchHistoryApi {
+    @POST("search/history")
+    suspend fun recordSearchHistory(
+        @Body payload: SearchHistoryRequestDto
+    ): Response<ApiEnvelopeDto<SearchHistoryRecordDto>>
 }

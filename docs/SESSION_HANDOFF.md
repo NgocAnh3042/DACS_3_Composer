@@ -17,6 +17,12 @@ Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trướ
 - `RecommendationRepository` implement interface domain; giữ hàm cũ và kết quả Boolean để không đổi luồng. `SearchViewModel` gọi use case cho thao tác này; phần tìm/lọc quán và món chưa đổi.
 - Thêm hai unit test cho thành công và map IOException. `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công; chưa thử trên điện thoại.
 
+## Refactor Android — Giai đoạn 3 DTO/error — 26/11/2026
+
+- Luồng ghi lịch sử tìm kiếm dùng DTO/mapper và `SearchHistoryApi` riêng; các API khác chưa chuyển khỏi Gson `JsonObject`.
+- `ErrorMapper` map `IOException`, `HttpException`, lỗi PHP `{error: ...}` và chuẩn `{code, message, details}` sang `AppError`. Error/body không được ghi log.
+- Unit tests gồm ErrorMapper (IO, 422 legacy, 503 HTTP) và mapper DTO/domain. `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest`: thành công; chưa chạy trên điện thoại.
+
 ## Đồng bộ hồ sơ Firebase và ngrok local — 25/11/2026
 
 - Theo yêu cầu chuyển về AnChinGo: `app/google-services.json` dùng project `dacs3-anchin-go` (948126651845); `backend/config.local.php` trên máy cũng xác minh token từ `dacs3-anchin-go`, vẫn dùng TiDB `food_delivery_app`. Cấu hình private này bị Git bỏ qua.
