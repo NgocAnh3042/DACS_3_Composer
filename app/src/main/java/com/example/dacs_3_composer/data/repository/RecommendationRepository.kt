@@ -3,6 +3,8 @@ package com.example.dacs_3_composer.data.repository
 import android.util.Log
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.domain.model.SearchQuery
+import com.example.dacs_3_composer.domain.repository.SearchHistoryRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
@@ -40,7 +42,7 @@ object RecommendationRefreshBus {
     fun consumeDirty(): Boolean = dirty.getAndSet(false)
 }
 
-class RecommendationRepository {
+class RecommendationRepository : SearchHistoryRepository {
     /**
      * Records a confirmed search query asynchronously.
      * Swallows network failures so normal food search is never interrupted.
@@ -67,6 +69,9 @@ class RecommendationRepository {
             false
         }
     }
+
+    override suspend fun recordSearchQuery(query: SearchQuery): Boolean =
+        recordSearchHistory(query.text)
 
     suspend fun getPersonalizedRecommendations(limit: Int = 10): PersonalizedRecommendationsResult {
         if (FirebaseAuth.getInstance().currentUser == null) {

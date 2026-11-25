@@ -7,6 +7,7 @@ import com.example.dacs_3_composer.core.model.RestaurantDetail
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.example.dacs_3_composer.data.repository.RecommendationRepository
+import com.example.dacs_3_composer.domain.usecase.RecordSearchQueryUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +21,8 @@ data class SearchDishWrapper(
 )
 
 class SearchViewModel(
-    private val recommendationRepository: RecommendationRepository = RecommendationRepository()
+    private val recordSearchQuery: RecordSearchQueryUseCase =
+        RecordSearchQueryUseCase(RecommendationRepository())
 ) : ViewModel() {
 
     private val _restaurantResults = MutableStateFlow<List<RestaurantDetail>>(emptyList())
@@ -49,7 +51,7 @@ class SearchViewModel(
         if (lastRecordedQuery != lowercaseQuery && trimmedQuery.length >= 2) {
             lastRecordedQuery = lowercaseQuery
             viewModelScope.launch {
-                recommendationRepository.recordSearchHistory(trimmedQuery)
+                recordSearchQuery(trimmedQuery)
             }
         }
 

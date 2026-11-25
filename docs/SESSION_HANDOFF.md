@@ -4,12 +4,18 @@ Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trướ
 
 ## Refactor Android — Giai đoạn 1 network/config — 26/11/2026
 
-- Tạo `app/src/main/java/com/example/dacs_3_composer/data/remote/NetworkModule.kt` để tạo OkHttp/Retrofit thống nhất; logger debug chỉ ghi method/path/status/thời gian, không ghi query, body hay token.
+- Tạo `app/src/main/java/com/example/dacs_3_composer/data/remote/NetworkModule.kt` để tạo OkHttp/Retrofit thống nhất; logger debug chỉ ghi method/status/thời gian hoặc loại exception, không ghi URL/path, query, body hay token.
 - Thêm `AuthApi`, `OrderApi`, `RestaurantApi`; giữ `FoodHubApi` generic để caller cũ chưa phải đổi ngay.
 - Debug manifest/resource cho phép cleartext phục vụ backend HTTP local; release tiếp tục chặn cleartext. Ngrok vẫn nên dùng HTTPS.
 - Giữ nguyên flavor `local`/`alwaysdata`, URL BuildConfig, Firebase auth header và API contract.
 - `assembleDebug`: thành công cho cả hai flavor. `testAlwaysdataDebugUnitTest` + `testLocalDebugUnitTest`: thành công. Task `testDebugUnitTest` riêng mơ hồ do hai flavor.
 - Chưa chạy trên điện thoại. Caller chưa được chuyển sang API nhóm; sẽ làm theo từng feature ở giai đoạn sau.
+
+## Refactor Android — Giai đoạn 2 domain — 26/11/2026
+
+- Thêm `SearchQuery`, `SearchHistoryRepository`, `RecordSearchQueryUseCase`, `core/common/Result.kt` và `AppError` cho luồng ghi lịch sử tìm kiếm.
+- `RecommendationRepository` implement interface domain; giữ hàm cũ và kết quả Boolean để không đổi luồng. `SearchViewModel` gọi use case cho thao tác này; phần tìm/lọc quán và món chưa đổi.
+- Thêm hai unit test cho thành công và map IOException. `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công; chưa thử trên điện thoại.
 
 ## Đồng bộ hồ sơ Firebase và ngrok local — 25/11/2026
 

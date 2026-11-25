@@ -23,7 +23,7 @@ Cập nhật: 26/11/2026. Đây là kết quả **Bước 0 — khảo sát**, c
 ### Dependency và phân tầng
 
 - Không tìm thấy Hilt, Dagger hoặc Koin trong dependencies/source; `di/` hiện không có file.
-- `domain/` hiện không có file; chưa có use case hoặc repository interface ở domain.
+- Lúc khảo sát ban đầu `domain/` chưa có file; Giai đoạn 2 đã thêm một luồng use case và repository contract. Các feature khác chưa chuyển sang domain.
 - `data/mapper/` hiện không có file. Model đang nằm trong `core/model`; API thường dùng `JsonObject`/Gson nên DTO, domain model và UI model chưa được tách nhất quán.
 - `data/repository/` có một số repository concrete, nhưng không phải đường truy cập duy nhất. Có chỗ khởi tạo repository thủ công và có chỗ gọi API/Auth trực tiếp từ ViewModel/Screen.
 - ViewModel sử dụng `StateFlow` ở nhiều feature. Screen thường thu thập state bằng `collectAsState`; chưa đồng nhất sang `collectAsStateWithLifecycle`. Một số xử lý điều hướng/trạng thái UI đặt trong Screen là hợp lý; request nghiệp vụ trực tiếp từ Screen cần được chuyển dần qua ViewModel.
@@ -84,3 +84,11 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Giữ các flavor `local` và `alwaysdata`, BuildConfig URL, API contract, auth header, và timeout như trước.
 - Kết quả: `assembleDebug` thành công, đóng gói `alwaysdataDebug` và `localDebug`. Hai tác vụ `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` thành công. `testDebugUnitTest` không chạy được riêng vì Gradle báo mơ hồ giữa hai flavor; đã chạy hai tác vụ cụ thể thay thế.
 - Còn lại có chủ đích: các ViewModel/Screen chưa được migrate sang service nhóm; sẽ chuyển từng feature ở giai đoạn presentation/repository. Chưa chạy trên thiết bị điện thoại.
+
+## 7. Giai đoạn 2 — domain cho lịch sử tìm kiếm (26/11/2026)
+
+- Thêm domain model thuần Kotlin `SearchQuery`, interface `SearchHistoryRepository`, và `RecordSearchQueryUseCase` cho một luồng nhỏ hiện có.
+- `RecommendationRepository` triển khai domain interface nhưng vẫn giữ `recordSearchHistory(String)` để tương thích. `SearchViewModel` dùng use case khi ghi lịch sử; tìm quán/món tiếp tục cùng luồng cũ.
+- Thêm `core/common/Result.kt` và `AppError` (`Network`, `Unauthorized`, `Validation`, `Server`, `Unknown`). Use case giữ cancellation, ánh xạ lỗi dự kiến sang `Result`; repository hiện vẫn bắt lỗi mạng và trả `false` như trước.
+- Thêm hai unit test cho kết quả thành công và ánh xạ IOException. `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công.
+- Còn lại có chủ đích: đây mới là một luồng mẫu; các luồng khác sẽ được chuyển dần ở giai đoạn tiếp theo. Chưa chạy trên thiết bị.

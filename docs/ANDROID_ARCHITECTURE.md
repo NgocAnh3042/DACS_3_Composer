@@ -1,6 +1,6 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Giai đoạn 1 network đã hoàn tất; phần đích bên dưới vẫn là mục tiêu chưa triển khai.
+Cập nhật: 26/11/2026. Giai đoạn 1 network và Giai đoạn 2 domain cho lịch sử tìm kiếm đã qua build/unit test; các luồng còn lại bên dưới là mục tiêu chưa triển khai.
 
 ## Hiện trạng
 
@@ -12,6 +12,10 @@ flowchart TD
     VM -. một số nơi gọi trực tiếp .-> Client[FoodHubClient]
     Screen -. một số call site cũ gọi trực tiếp .-> Client
     Repo --> Client
+    VM --> UC[RecordSearchQueryUseCase: lịch sử tìm kiếm]
+    UC --> Contract[SearchHistoryRepository interface]
+    Contract -. implement .-> Impl[RecommendationRepository]
+    Impl --> Client
     Client --> Network[NetworkModule: OkHttp + Retrofit]
     Network --> Groups[AuthApi / OrderApi / RestaurantApi; FoodHubApi cũ vẫn giữ]
     Groups -->|Firebase ID token + URL theo flavor| PHP[PHP API: Alwaysdata hoặc local qua ngrok]
@@ -20,7 +24,7 @@ flowchart TD
     Repo --> External[Cloudinary / API dịch vụ ngoài]
 ```
 
-Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: `domain/`, `di/` và `data/mapper/` đang rỗng; không có Hilt; Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
+Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain hiện có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho một luồng; `di/` và `data/mapper/` vẫn rỗng; không có Hilt; Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
 
 Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi.
 
