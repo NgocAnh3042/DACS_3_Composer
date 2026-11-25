@@ -632,3 +632,10 @@ Các quan sát dưới đây từ code hiện tại, chưa được tự động
 ## 7. Cập nhật tài liệu cho phiên sau
 
 Sau thay đổi đáng kể, cập nhật ngày, chức năng/file/route liên quan, dữ liệu đã đổi và kiểm tra thực sự đã chạy. Nếu tài liệu khác code, kiểm tra implementation và bản Apache rồi sửa mô tả; không ép code khớp một ghi chú cũ bằng cách xóa dữ liệu hoặc bỏ xác thực.
+
+## 8. Refactor Android tiếp tục (26/11/2026)
+
+- Các commit refactor đã có: `08648a4` khảo sát/tài liệu; `3c725b8` network; `76a04bd` domain search history; `70cc676` DTO/error mapping; `ffd1ecc` Hilt/search history; `41f2974` auth presentation; `c614125` customer search; `e7d3a37` customer home.
+- Cart vừa được chuyển vào `feature/customer/cart/presentation/` cùng các import consumer. Build `assembleDebug` và unit test `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` đã đạt. Chưa thử app trên thiết bị.
+- Việc tiếp theo: hoàn thiện Cart presentation bằng state/event phù hợp trước khi chuyển sang các feature customer còn lại. Cart hiện còn state lists/UI đọc trực tiếp và gọi API/Firebase trực tiếp; giữ nguyên semantics của giỏ và phạm vi ViewModel chia sẻ từ `MainRouteContainerUser`.
+- Git index có các thay đổi không liên quan đã được stage trước đó (đặc biệt rename `backend/` thành `backenddd/`, cùng `.gitignore`, `.idea/vcs.xml`, `docs/DATABASE.md`). Không reset/stage/commit chúng. Chỉ commit file refactor Android và tài liệu được sửa có chủ đích bằng pathspec cụ thể/`git commit --only`; không push GitHub nếu chưa được yêu cầu.

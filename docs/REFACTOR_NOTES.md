@@ -129,3 +129,10 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Hilt tạo HomeViewModel và cung cấp RecommendationRepository/FirebaseAuth. Gom danh sách quán/món, bộ lọc, thông tin hồ sơ/địa chỉ và trạng thái tải vào `HomeUiState`; HomeScreen, NotificationScreen và các route dùng `collectAsStateWithLifecycle` hoặc state snapshot.
 - Giữ logic lọc danh mục, cá nhân hóa feed, nạp địa chỉ và API hiện tại. HomeViewModel vẫn gọi `FoodHubClient` cho hồ sơ/địa chỉ/quán/món; chuyển các thao tác này sang repository/use case còn lại cho giai đoạn sau.
 - Cập nhật `HomeFeedCompositionTest` sang vị trí mới của HomeViewModel. Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa chạy trên điện thoại.
+
+## 13. Giai đoạn 5 — customer cart package (26/11/2026)
+
+- Chuyển `CartScreen`, `CartViewModel` và `CartItem` vào `feature/customer/cart/presentation/`; cập nhật các consumer ở route customer, Home, chi tiết món và chi tiết quán.
+- Giữ `CartViewModel` do `MainRouteContainerUser` tạo và truyền vào các route để giỏ tiếp tục được chia sẻ như trước; không đổi đặt hàng, tính phí, voucher hay lưu địa chỉ.
+- Đây mới là bước sắp xếp package. Cart chưa có `CartUiState`/event thống nhất: màn hình vẫn đọc `mutableStateList` trực tiếp, ViewModel vẫn gọi `FoodHubClient` và `FirebaseAuth` trực tiếp. Tách các phần này sẽ làm ở bước kế tiếp sau khi chuẩn bị state contract.
+- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Có cảnh báo deprecated icon sẵn trong `CartScreen`; chưa test trên điện thoại.

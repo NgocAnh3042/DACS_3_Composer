@@ -1,4 +1,4 @@
-    package com.example.dacs_3_composer.feature.customer.cart
+    package com.example.dacs_3_composer.feature.customer.cart.presentation
 
     import android.widget.Toast
     import androidx.compose.foundation.background

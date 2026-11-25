@@ -23,7 +23,7 @@ import coil.compose.AsyncImage
 import com.example.dacs_3_composer.core.model.DishItem
 import com.example.dacs_3_composer.feature.customer.profileRestaurant.components.DishRowUserItem
 import com.example.dacs_3_composer.feature.customer.profileRestaurant.components.RestaurantInfoUserCard
-import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
+import com.example.dacs_3_composer.feature.customer.cart.presentation.CartViewModel
 import com.example.dacs_3_composer.data.repository.ChatRepository
 import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
 import com.example.dacs_3_composer.feature.shared.location.rememberUserCoordinates

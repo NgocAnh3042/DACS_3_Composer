@@ -37,7 +37,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
+import com.example.dacs_3_composer.feature.customer.cart.presentation.CartViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.*
 import com.example.dacs_3_composer.feature.customer.search.components.SectionTitle
 import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate

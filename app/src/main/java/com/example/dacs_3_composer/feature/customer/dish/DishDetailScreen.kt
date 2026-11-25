@@ -33,7 +33,7 @@ import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.core.model.DishItem
 import com.example.dacs_3_composer.core.model.RestaurantDetail
 import com.example.dacs_3_composer.data.remote.FoodHubClient
-import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
+import com.example.dacs_3_composer.feature.customer.cart.presentation.CartViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.DeliciousDishItem
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
