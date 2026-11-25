@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.customer.search
+package com.example.dacs_3_composer.feature.customer.search.presentation
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -21,31 +21,30 @@ data class SearchDishWrapper(
     val restaurantName: String
 )
 
+data class SearchUiState(
+    val restaurantResults: List<RestaurantDetail> = emptyList(),
+    val dishResults: List<SearchDishWrapper> = emptyList(),
+    val isLoading: Boolean = false
+)
+
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val recordSearchQuery: RecordSearchQueryUseCase
 ) : ViewModel() {
 
-    private val _restaurantResults = MutableStateFlow<List<RestaurantDetail>>(emptyList())
-    val restaurantResults: StateFlow<List<RestaurantDetail>> = _restaurantResults.asStateFlow()
-
-    private val _dishResults = MutableStateFlow<List<SearchDishWrapper>>(emptyList())
-    val dishResults: StateFlow<List<SearchDishWrapper>> = _dishResults.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _uiState = MutableStateFlow(SearchUiState())
+    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     private var lastRecordedQuery: String? = null
 
     fun searchRestaurantsAndDishes(query: String) {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isBlank()) {
-            _restaurantResults.value = emptyList()
-            _dishResults.value = emptyList()
+            _uiState.value = SearchUiState()
             return
         }
 
-        _isLoading.value = true
+        _uiState.value = _uiState.value.copy(isLoading = true)
         val lowercaseQuery = trimmedQuery.lowercase(Locale.getDefault())
 
         // Ghi nhận lịch sử tìm kiếm đã xác nhận bất đồng bộ (không chặn kết quả, không lưu trùng do recomposition)
@@ -60,21 +59,27 @@ class SearchViewModel @Inject constructor(
             try {
                 val allRestaurants = FoodHubClient.list<RestaurantDetail>("stores")
                 val allDishes = FoodHubClient.list<Dish>("dishes")
-                _restaurantResults.value = allRestaurants.filter { restaurant ->
+                val restaurantResults = allRestaurants.filter { restaurant ->
                     restaurant.name.contains(lowercaseQuery, ignoreCase = true) ||
                         restaurant.description.contains(lowercaseQuery, ignoreCase = true)
                 }
-                _dishResults.value = allDishes.filter { dish ->
+                val dishResults = allDishes.filter { dish ->
                     dish.name.contains(lowercaseQuery, ignoreCase = true) ||
                         dish.description.contains(lowercaseQuery, ignoreCase = true)
                 }.map { dish ->
                     SearchDishWrapper(dish, allRestaurants.firstOrNull { it.id == dish.restaurantId }?.name ?: "Cửa hàng đối tác")
                 }
+                _uiState.value = SearchUiState(
+                    restaurantResults = restaurantResults,
+                    dishResults = dishResults,
+                    isLoading = false
+                )
             } catch (e: Exception) {
                 Log.e("SearchViewModel", "Lỗi truy vấn MySQL: ${e.message}", e)
-                _restaurantResults.value = emptyList()
-                _dishResults.value = emptyList()
-            } finally { _isLoading.value = false }
+                _uiState.value = SearchUiState()
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
         }
     }
 }

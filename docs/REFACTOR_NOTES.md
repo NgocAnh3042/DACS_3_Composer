@@ -115,3 +115,10 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - `AuthViewModel` được cung cấp qua Hilt. `Context` vẫn chỉ được truyền vào thao tác khi cần Credential Manager/SharedPreferences, không lưu vào ViewModel.
 - `ui/auth/` không tồn tại trong repo nên không có tệp cần gộp/xóa.
 - Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa thử đăng nhập trên thiết bị.
+
+## 11. Giai đoạn 5 — customer search presentation (26/11/2026)
+
+- Chuyển `SearchScreen` và `SearchViewModel` vào `feature/customer/search/presentation/`; các component dùng chung như `SectionTitle` vẫn ở `search/components/` vì HomeScreen đang gọi chúng.
+- Gom kết quả nhà hàng, món ăn và trạng thái tải vào `SearchUiState`; `SearchScreen` thu thập state bằng `collectAsStateWithLifecycle`. SearchViewModel vẫn do Hilt tạo.
+- Chưa chuyển tải danh sách quán/món sang domain repository/use case: hai truy vấn vẫn dùng `FoodHubClient` để giữ phạm vi nhỏ; lịch sử tìm kiếm tiếp tục qua use case/DTO/repository đã tách ở G2–G4.
+- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa thử luồng tìm kiếm trên thiết bị.

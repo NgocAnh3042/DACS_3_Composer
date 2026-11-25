@@ -2,6 +2,13 @@
 
 Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
 
+## Refactor Android — customer search presentation — 26/11/2026
+
+- `SearchScreen` và `SearchViewModel` nằm trong `feature/customer/search/presentation/`; component dùng chung ở `search/components/` được giữ do HomeScreen cũng dùng.
+- `SearchViewModel` phát `SearchUiState` gộp danh sách nhà hàng, món và loading; `SearchScreen` dùng `collectAsStateWithLifecycle`.
+- Tải danh sách quán/món vẫn gọi `FoodHubClient` trực tiếp. Ghi lịch sử tìm kiếm đã qua use case, repository, DTO và mapper.
+- `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công; chưa chạy trên thiết bị.
+
 ## Refactor Android — Giai đoạn 5 auth presentation — 26/11/2026
 
 - Chuyển auth presentation vào `feature/auth/presentation/` (`AuthViewModel`, `AuthNavHost`, `LoginScreen`, `RegisterScreen`); repo không có `ui/auth/` cũ.

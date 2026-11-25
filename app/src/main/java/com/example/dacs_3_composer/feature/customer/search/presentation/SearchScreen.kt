@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.customer.search
+package com.example.dacs_3_composer.feature.customer.search.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +22,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.R
+import com.example.dacs_3_composer.feature.customer.search.components.SearchResultTitle
 import com.example.dacs_3_composer.feature.customer.home.components.RestaurantItem
 import com.example.dacs_3_composer.feature.customer.search.components.FilterBar
 import com.example.dacs_3_composer.feature.customer.search.components.SearchHeader
@@ -38,9 +40,10 @@ fun SearchScreen(
         searchViewModel.searchRestaurantsAndDishes(searchQuery)
     }
 
-    val restaurantResults by searchViewModel.restaurantResults.collectAsState()
-    val dishResults by searchViewModel.dishResults.collectAsState()
-    val isLoading by searchViewModel.isLoading.collectAsState()
+    val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    val restaurantResults = uiState.restaurantResults
+    val dishResults = uiState.dishResults
+    val isLoading = uiState.isLoading
 
     // Tính tổng số lượng kết quả tìm kiếm được
     val totalResultsCount = restaurantResults.size + dishResults.size
@@ -72,7 +75,7 @@ fun SearchScreen(
                 ) {
                     // Tiêu đề hiển thị từ khóa thực tế và số lượng kết quả tìm thấy
                     item {
-                        com.example.dacs_3_composer.feature.customer.search.components.SearchResultTitle(
+                        SearchResultTitle(
                             query = searchQuery,
                             resultCount = totalResultsCount
                         )

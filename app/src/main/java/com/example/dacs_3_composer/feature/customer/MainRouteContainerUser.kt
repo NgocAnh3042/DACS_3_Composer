@@ -30,7 +30,7 @@ import com.example.dacs_3_composer.feature.customer.order.OrderDetailScreen
 import com.example.dacs_3_composer.feature.customer.order.OrderViewModel
 import com.example.dacs_3_composer.feature.customer.profile.ProfileScreen
 import com.example.dacs_3_composer.feature.customer.profileRestaurant.RestaurantDetailScreen
-import com.example.dacs_3_composer.feature.customer.search.SearchScreen
+import com.example.dacs_3_composer.feature.customer.search.presentation.SearchScreen
 import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
 import com.example.dacs_3_composer.feature.customer.cart.CartScreen
 import com.example.dacs_3_composer.feature.customer.notification.NotificationScreen
