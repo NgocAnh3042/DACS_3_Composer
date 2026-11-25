@@ -121,7 +121,7 @@ object FoodHubClient {
 
     private val retrofit by lazy {
         val authInterceptor = FirebaseAuthInterceptor(::resolveFastIdToken)
-        NetworkModule.createRetrofit(baseUrl, NetworkModule.createOkHttpClient(authInterceptor), gson)
+        RemoteNetworkFactory.createRetrofit(baseUrl, RemoteNetworkFactory.createOkHttpClient(authInterceptor), gson)
     }
 
     // Grouped services are the preferred entry point for new code. The generic API remains

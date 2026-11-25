@@ -35,7 +35,9 @@ import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.example.dacs_3_composer.data.firebase.FirebasePushService
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.JsonObject
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

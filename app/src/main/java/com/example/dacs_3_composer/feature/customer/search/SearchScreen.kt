@@ -17,7 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.R
@@ -31,7 +31,7 @@ fun SearchScreen(
     searchQuery: String,
     navController: NavController, // 🌟 Nhận NavController từ màn hình chính để chuyển tiếp trang
     onBackClick: () -> Unit = {},
-    searchViewModel: SearchViewModel = viewModel(),
+    searchViewModel: SearchViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(searchQuery) {

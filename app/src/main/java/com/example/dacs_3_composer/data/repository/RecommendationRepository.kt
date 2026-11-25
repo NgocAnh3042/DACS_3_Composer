@@ -7,6 +7,7 @@ import com.example.dacs_3_composer.data.mapper.ErrorMapper
 import com.example.dacs_3_composer.data.mapper.toDto
 import com.example.dacs_3_composer.data.mapper.toDomainResult
 import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.data.remote.SearchHistoryApi
 import com.example.dacs_3_composer.domain.model.SearchQuery
 import com.example.dacs_3_composer.domain.repository.SearchHistoryRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -15,6 +16,7 @@ import com.google.gson.JsonObject
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
+import javax.inject.Inject
 
 data class PersonalizedDish(
     val dish: Dish,
@@ -47,7 +49,12 @@ object RecommendationRefreshBus {
     fun consumeDirty(): Boolean = dirty.getAndSet(false)
 }
 
-class RecommendationRepository : SearchHistoryRepository {
+class RecommendationRepository @Inject constructor(
+    private val searchHistoryApi: SearchHistoryApi,
+    private val firebaseAuth: FirebaseAuth
+) : SearchHistoryRepository {
+    constructor() : this(FoodHubClient.searchHistoryApi, FirebaseAuth.getInstance())
+
     /**
      * Records a confirmed search query asynchronously.
      * Swallows network failures so normal food search is never interrupted.
@@ -61,11 +68,11 @@ class RecommendationRepository : SearchHistoryRepository {
 
     override suspend fun recordSearchQuery(query: SearchQuery): AppResult<Boolean> {
         val cleaned = query.text.trim()
-        if (cleaned.length < 2 || FirebaseAuth.getInstance().currentUser == null) {
+        if (cleaned.length < 2 || firebaseAuth.currentUser == null) {
             return AppResult.Success(false)
         }
         return try {
-            val response = FoodHubClient.searchHistoryApi.recordSearchHistory(
+            val response = searchHistoryApi.recordSearchHistory(
                 query.copy(text = cleaned).toDto()
             )
             if (!response.isSuccessful) {

@@ -2,6 +2,14 @@
 
 Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
 
+## Refactor Android — Giai đoạn 4 Hilt — 26/11/2026
+
+- Hilt 2.60.1 được thêm bằng Gradle version catalog; vì AGP 9 bật Kotlin tích hợp sẵn, module dùng `com.android.legacy-kapt` (plugin `org.jetbrains.kotlin.kapt` không tương thích).
+- `MainApplication` dùng `@HiltAndroidApp`, `MainActivity` dùng `@AndroidEntryPoint`; `SearchScreen` lấy `@HiltViewModel SearchViewModel` qua `hiltViewModel()`.
+- Thêm các module Hilt cho network, repository binding, FirebaseAuth và dispatcher IO/Default/Main. Luồng lịch sử tìm kiếm được cấp `SearchHistoryApi`, `FirebaseAuth`, interface repository và use case qua DI.
+- `FoodHubClient` chưa bị xóa: phần lớn màn hình/repository cũ vẫn gọi singleton này. Constructor không tham số của `RecommendationRepository` cũng còn để tương thích với caller cũ.
+- Đã chạy `assembleDebug`: thành công cả `alwaysdataDebug` và `localDebug`; `testAlwaysdataDebugUnitTest` + `testLocalDebugUnitTest`: thành công. Chưa cài/chạy trên điện thoại.
+
 ## Refactor Android — Giai đoạn 1 network/config — 26/11/2026
 
 - Tạo `app/src/main/java/com/example/dacs_3_composer/data/remote/NetworkModule.kt` để tạo OkHttp/Retrofit thống nhất; logger debug chỉ ghi method/status/thời gian hoặc loại exception, không ghi URL/path, query, body hay token.

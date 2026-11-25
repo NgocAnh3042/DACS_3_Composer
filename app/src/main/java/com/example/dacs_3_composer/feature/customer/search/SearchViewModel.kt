@@ -6,8 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.dacs_3_composer.core.model.RestaurantDetail
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.remote.FoodHubClient
-import com.example.dacs_3_composer.data.repository.RecommendationRepository
 import com.example.dacs_3_composer.domain.usecase.RecordSearchQueryUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,9 +21,9 @@ data class SearchDishWrapper(
     val restaurantName: String
 )
 
-class SearchViewModel(
-    private val recordSearchQuery: RecordSearchQueryUseCase =
-        RecordSearchQueryUseCase(RecommendationRepository())
+@HiltViewModel
+class SearchViewModel @Inject constructor(
+    private val recordSearchQuery: RecordSearchQueryUseCase
 ) : ViewModel() {
 
     private val _restaurantResults = MutableStateFlow<List<RestaurantDetail>>(emptyList())

@@ -1,6 +1,6 @@
 # Khảo sát và kế hoạch refactor Android
 
-Cập nhật: 26/11/2026. Đây là kết quả **Bước 0 — khảo sát**, chưa refactor mã nguồn.
+Cập nhật: 26/11/2026. Bước 0 và các giai đoạn 1–4 đã thực hiện theo từng lát nhỏ; các phần khác vẫn ở hiện trạng ban đầu.
 
 ## 1. Hiện trạng đã kiểm tra
 
@@ -22,7 +22,7 @@ Cập nhật: 26/11/2026. Đây là kết quả **Bước 0 — khảo sát**, c
 
 ### Dependency và phân tầng
 
-- Không tìm thấy Hilt, Dagger hoặc Koin trong dependencies/source; `di/` hiện không có file.
+- Hilt hiện được dùng cho `MainApplication`, `MainActivity` và luồng ghi lịch sử tìm kiếm. Phần lớn feature khác vẫn chưa migrate; `FoodHubClient` còn làm singleton tương thích cho caller cũ.
 - Lúc khảo sát ban đầu `domain/` chưa có file; Giai đoạn 2 đã thêm một luồng use case và repository contract. Các feature khác chưa chuyển sang domain.
 - `data/mapper/` hiện không có file. Model đang nằm trong `core/model`; API thường dùng `JsonObject`/Gson nên DTO, domain model và UI model chưa được tách nhất quán.
 - `data/repository/` có một số repository concrete, nhưng không phải đường truy cập duy nhất. Có chỗ khởi tạo repository thủ công và có chỗ gọi API/Auth trực tiếp từ ViewModel/Screen.
@@ -67,13 +67,13 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - TiDB và Firebase là dịch vụ hiện hữu; không reset/import dữ liệu. `users.id` MySQL và Firebase UID là hai định danh khác nhau.
 - Không đưa `backend.local.properties`, mật khẩu database, token, PayOS key hoặc service-account private key vào Git, tài liệu hay log.
 - Refactor network có nguy cơ ảnh hưởng cả API Firebase/token và các luồng hỗ trợ thời gian phản hồi dài (AI); phải giữ interceptor timeout/auth hiện hữu và chạy build/test sau từng giai đoạn.
-- Hiện `domain/` và `di/` rỗng nhưng đây chưa phải bằng chứng mọi code cũ không còn cần thiết; không xóa module/tệp khác nếu chưa tìm consumer.
+- `domain/` và `di/` mới được triển khai cho lát lịch sử tìm kiếm; không xóa module/tệp khác nếu chưa tìm consumer.
 
 ## 5. Trạng thái bước khảo sát
 
 - Đã đọc cấu trúc Android, Gradle/dependencies, manifest, network client/interceptor, cấu hình token và các call site trực tiếp tiêu biểu.
 - Bước khảo sát ban đầu không sửa mã ứng dụng và không chạy build/test.
-- Người dùng đã xác nhận kế hoạch; Giai đoạn 1 được ghi riêng bên dưới.
+- Người dùng đã xác nhận kế hoạch; các giai đoạn hoàn tất được ghi riêng bên dưới.
 
 ## 6. Giai đoạn 1 — network/config (26/11/2026)
 
@@ -99,3 +99,11 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - `ErrorMapper` chuyển `HttpException`, `IOException` và payload lỗi HTTP thành `AppError`; hỗ trợ payload PHP `error` lẫn payload `code/message/details`. Không ghi body lỗi vào log.
 - Thêm test ErrorMapper cho IOException, lỗi PHP 422 và HttpException 503; thêm test mapper request/result.
 - Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công. Chưa chạy trên điện thoại.
+
+## 9. Giai đoạn 4 — Hilt cho lịch sử tìm kiếm (26/11/2026)
+
+- Thêm Hilt 2.60.1; dùng `com.android.legacy-kapt` do project dùng AGP 9 với Kotlin tích hợp sẵn, không tương thích plugin `org.jetbrains.kotlin.kapt`.
+- Đánh dấu `MainApplication` bằng `@HiltAndroidApp`, `MainActivity` bằng `@AndroidEntryPoint`; `SearchViewModel` được tạo qua `@HiltViewModel` và `hiltViewModel()` trong `SearchScreen`.
+- Tạo `di/NetworkModule`, `RepositoryModule` (`@Binds`), `FirebaseModule`, `DispatcherModule` với qualifier IO/Default/Main. Repository tìm kiếm nhận `SearchHistoryApi` và `FirebaseAuth` qua constructor; constructor không tham số còn lại để caller cũ hoạt động.
+- Hilt network binding hiện trỏ tới `FoodHubClient.searchHistoryApi`. Retrofit/OkHttp vẫn do factory cũ khởi tạo; chưa xóa singleton thủ công vì các feature khác còn phụ thuộc trực tiếp.
+- Kết quả: `assembleDebug` thành công cho cả hai flavor; `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công. Chưa chạy app trên điện thoại.

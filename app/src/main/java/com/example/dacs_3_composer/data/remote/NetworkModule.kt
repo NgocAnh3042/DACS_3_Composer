@@ -13,7 +13,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** Central construction point for the FoodHub API HTTP and Retrofit clients. */
-object NetworkModule {
+object RemoteNetworkFactory {
     fun createOkHttpClient(authInterceptor: Interceptor): OkHttpClient =
         OkHttpClient.Builder()
             .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
