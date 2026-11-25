@@ -1,13 +1,14 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Giai đoạn 1 network, Giai đoạn 2 domain, Giai đoạn 3 DTO/error và Giai đoạn 4 Hilt cho luồng lịch sử tìm kiếm đã qua build/unit test; các luồng khác bên dưới vẫn chưa chuyển.
+Cập nhật: 26/11/2026. Giai đoạn 1 network, Giai đoạn 2 domain, Giai đoạn 3 DTO/error, Giai đoạn 4 Hilt và lát auth của Giai đoạn 5 đã qua build/unit test; các feature khác vẫn chưa chuyển.
 
 ## Hiện trạng
 
 ```mermaid
 flowchart TD
     User[Người dùng] --> Screen[Jetpack Compose Screen]
-    Screen --> VM[ViewModel / StateFlow]
+    Screen --> VM[ViewModel / StateFlow UiState]
+    VM -. one-shot auth message/navigation .-> Screen
     VM --> Repo[Repository, nếu feature dùng]
     VM -. một số nơi gọi trực tiếp .-> Client[FoodHubClient]
     Screen -. một số call site cũ gọi trực tiếp .-> Client
@@ -27,9 +28,9 @@ flowchart TD
     Repo --> External[Cloudinary / API dịch vụ ngoài]
 ```
 
-Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain hiện có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho một luồng; `di/` cung cấp Hilt cho lát tìm kiếm này, còn Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
+Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: domain có `SearchQuery`, `SearchHistoryRepository` và `RecordSearchQueryUseCase` cho lịch sử tìm kiếm; auth có `AuthUiState` và one-shot events. `di/` cung cấp Hilt cho SearchViewModel và AuthViewModel, còn phần lớn Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
 
-Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi. DTO/mapper/ErrorMapper hiện được dùng cho riêng luồng lịch sử tìm kiếm; các API cũ chưa được chuyển. Hilt tạo `SearchViewModel` và cấp use case/repository; Retrofit vẫn được lấy từ `FoodHubClient` singleton trong giai đoạn chuyển tiếp.
+Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi. DTO/mapper/ErrorMapper hiện được dùng cho riêng luồng lịch sử tìm kiếm; các API cũ chưa được chuyển. Hilt tạo SearchViewModel/AuthViewModel và cấp use case/repository cho lịch sử tìm kiếm; Retrofit vẫn được lấy từ `FoodHubClient` singleton trong giai đoạn chuyển tiếp. AuthViewModel còn gọi Firebase/API trực tiếp; tách AuthUseCase/Repository sẽ làm trong giai đoạn sau.
 
 ## Đích sau refactor (chưa triển khai)
 

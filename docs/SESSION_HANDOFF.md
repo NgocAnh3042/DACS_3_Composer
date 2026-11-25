@@ -2,6 +2,13 @@
 
 Cập nhật **26/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
 
+## Refactor Android — Giai đoạn 5 auth presentation — 26/11/2026
+
+- Chuyển auth presentation vào `feature/auth/presentation/` (`AuthViewModel`, `AuthNavHost`, `LoginScreen`, `RegisterScreen`); repo không có `ui/auth/` cũ.
+- AuthViewModel dùng `StateFlow<AuthUiState>` cho loading và channel `AuthUiEvent` cho thông báo/điều hướng; Login/Register nhận trạng thái để khóa nút và hiện tiến trình. AuthViewModel được Hilt tạo.
+- Giữ luồng Firebase login/register, API đồng bộ hồ sơ, cache role, vai trò và điều hướng hiện tại. `Context` được truyền cho hàm tương tác Credential Manager/SharedPreferences, không lưu thành thuộc tính ViewModel.
+- `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa xác minh đăng nhập thật trên thiết bị.
+
 ## Refactor Android — Giai đoạn 4 Hilt — 26/11/2026
 
 - Hilt 2.60.1 được thêm bằng Gradle version catalog; vì AGP 9 bật Kotlin tích hợp sẵn, module dùng `com.android.legacy-kapt` (plugin `org.jetbrains.kotlin.kapt` không tương thích).

@@ -26,7 +26,7 @@ Cập nhật: 26/11/2026. Bước 0 và các giai đoạn 1–4 đã thực hi�
 - Lúc khảo sát ban đầu `domain/` chưa có file; Giai đoạn 2 đã thêm một luồng use case và repository contract. Các feature khác chưa chuyển sang domain.
 - `data/mapper/` hiện không có file. Model đang nằm trong `core/model`; API thường dùng `JsonObject`/Gson nên DTO, domain model và UI model chưa được tách nhất quán.
 - `data/repository/` có một số repository concrete, nhưng không phải đường truy cập duy nhất. Có chỗ khởi tạo repository thủ công và có chỗ gọi API/Auth trực tiếp từ ViewModel/Screen.
-- ViewModel sử dụng `StateFlow` ở nhiều feature. Screen thường thu thập state bằng `collectAsState`; chưa đồng nhất sang `collectAsStateWithLifecycle`. Một số xử lý điều hướng/trạng thái UI đặt trong Screen là hợp lý; request nghiệp vụ trực tiếp từ Screen cần được chuyển dần qua ViewModel.
+- ViewModel sử dụng `StateFlow` ở nhiều feature. Screen thường thu thập state bằng `collectAsState`; chưa đồng nhất sang `collectAsStateWithLifecycle`. Luồng auth đã chuyển sang `AuthUiState` + event một lần; các feature khác vẫn cần migrate dần.
 - `MainActivity` và `AuthViewModel` có dùng `Context` cho phần đăng nhập/khôi phục phiên. Khi refactor cần giữ Credential Manager/luồng hiện tại nhưng tránh lưu Activity/Context trong trường sống lâu của ViewModel.
 - `network_security_config.xml` đã tồn tại; `release` chưa bật R8/minify (`isMinifyEnabled = false`). JUnit 4 và AndroidX tests đã có khai báo.
 
@@ -107,3 +107,11 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Tạo `di/NetworkModule`, `RepositoryModule` (`@Binds`), `FirebaseModule`, `DispatcherModule` với qualifier IO/Default/Main. Repository tìm kiếm nhận `SearchHistoryApi` và `FirebaseAuth` qua constructor; constructor không tham số còn lại để caller cũ hoạt động.
 - Hilt network binding hiện trỏ tới `FoodHubClient.searchHistoryApi`. Retrofit/OkHttp vẫn do factory cũ khởi tạo; chưa xóa singleton thủ công vì các feature khác còn phụ thuộc trực tiếp.
 - Kết quả: `assembleDebug` thành công cho cả hai flavor; `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` đều thành công. Chưa chạy app trên điện thoại.
+
+## 10. Giai đoạn 5 — auth presentation (26/11/2026)
+
+- Chuyển `AuthViewModel`, `AuthNavHost`, `LoginScreen` và `RegisterScreen` vào `feature/auth/presentation/`; cập nhật các import và consumer tại `MainActivity`.
+- `AuthViewModel` dùng `StateFlow<AuthUiState>` để biểu diễn loading và `Channel<AuthUiEvent>` cho message, role login, hoàn tất đăng ký và logout. Screen khóa nút khi đang xử lý; luồng xác thực Firebase, đồng bộ hồ sơ API, lưu role và điều hướng theo quyền giữ nguyên.
+- `AuthViewModel` được cung cấp qua Hilt. `Context` vẫn chỉ được truyền vào thao tác khi cần Credential Manager/SharedPreferences, không lưu vào ViewModel.
+- `ui/auth/` không tồn tại trong repo nên không có tệp cần gộp/xóa.
+- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Chưa thử đăng nhập trên thiết bị.

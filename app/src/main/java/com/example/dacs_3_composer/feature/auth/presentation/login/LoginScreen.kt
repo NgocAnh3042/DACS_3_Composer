@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.auth.login
+package com.example.dacs_3_composer.feature.auth.presentation.login
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +35,7 @@ import com.example.dacs_3_composer.R
 @Composable
 fun LoginScreen(
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
     onLoginClick: (String, String) -> Unit = { _, _ -> },
     onSignUpClick: () -> Unit = {},
     onFacebookClick: () -> Unit = {},
@@ -229,6 +230,7 @@ fun LoginScreen(
                     // Login Button with Gradient
                     Button(
                         onClick = { onLoginClick(email, password) },
+                        enabled = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -248,6 +250,13 @@ fun LoginScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
                                 Text(
                                     text = "Đăng nhập",
                                     fontSize = 18.sp,
@@ -260,6 +269,7 @@ fun LoginScreen(
                                     contentDescription = null,
                                     tint = Color.White
                                 )
+                                }
                             }
                         }
                     }
@@ -303,7 +313,7 @@ fun LoginScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
-                                .clickable { onGoogleClick() },
+                                .clickable(enabled = !isLoading) { onGoogleClick() },
                             shape = RoundedCornerShape(16.dp),
                             color = Color(0xFFF3F4F5)
                         ) {
@@ -322,7 +332,7 @@ fun LoginScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(56.dp)
-                                .clickable { onFacebookClick() },
+                                .clickable(enabled = !isLoading) { onFacebookClick() },
                             shape = RoundedCornerShape(16.dp),
                             color = Color(0xFFF3F4F5)
                         ) {

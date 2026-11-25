@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.auth
+package com.example.dacs_3_composer.feature.auth.presentation
 
 import android.content.Context
 import android.util.Log
@@ -19,16 +19,42 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
 
-class AuthViewModel : ViewModel() {
+data class AuthUiState(val isLoading: Boolean = false)
+
+sealed interface AuthUiEvent {
+    data class ShowMessage(val message: String) : AuthUiEvent
+    data class Authenticated(val role: String) : AuthUiEvent
+    data object RegistrationCompleted : AuthUiEvent
+    data object LoggedOut : AuthUiEvent
+}
+
+@HiltViewModel
+class AuthViewModel @Inject constructor() : ViewModel() {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val activityLogRepository = ActivityLogRepository()
 
-    private val _authState = MutableStateFlow<String>("")
-    val authState: StateFlow<String> = _authState
+    private val _uiState = MutableStateFlow(AuthUiState())
+    val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+    private val _events = Channel<AuthUiEvent>(Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
+
+    private fun setLoading(isLoading: Boolean) {
+        _uiState.value = AuthUiState(isLoading = isLoading)
+    }
+
+    private fun showMessage(message: String) {
+        setLoading(false)
+        _events.trySend(AuthUiEvent.ShowMessage(message))
+    }
 
     private suspend fun syncUserProfile(fullName: String = "", phone: String = "", requestedRole: String = "customer"): String {
         val current = auth.currentUser ?: error("Chưa đăng nhập Firebase")
@@ -48,7 +74,7 @@ class AuthViewModel : ViewModel() {
     }
 
     fun loginWithGoogle(context: Context) {
-        _authState.value = "Đang kết nối với Google..."
+        setLoading(true)
         val credentialManager = CredentialManager.create(context)
 
         val googleIdOption = GetGoogleIdOption.Builder()
@@ -82,33 +108,33 @@ class AuthViewModel : ViewModel() {
                                     if (role == "restaurant") auth.currentUser?.uid?.let(::logLogin)
                                     triggerLoginSuccessByRole(context, role)
                                 } catch (e: Exception) {
-                                    _authState.value = "Đăng nhập Google thành công nhưng lỗi đồng bộ hồ sơ: ${e.message}"
+                                    showMessage("Đăng nhập Google thành công nhưng lỗi đồng bộ hồ sơ: ${e.message}")
                                 }
                             }
                         } else {
-                            _authState.value = "Lỗi Firebase: ${task.exception?.localizedMessage ?: "không xác định"}"
+                            showMessage("Lỗi Firebase: ${task.exception?.localizedMessage ?: "không xác định"}")
                         }
                 }
             } catch (_: GetCredentialCancellationException) {
-                _authState.value = "Bạn đã hủy đăng nhập Google"
+                showMessage("Bạn đã hủy đăng nhập Google")
             } catch (e: Exception) {
                 Log.e("AuthViewModel", "Google sign-in failed", e)
-                _authState.value = "Không thể đăng nhập Google: ${e.localizedMessage ?: e.javaClass.simpleName}"
+                showMessage("Không thể đăng nhập Google: ${e.localizedMessage ?: e.javaClass.simpleName}")
             }
         }
     }
 
     fun registerUser(context: Context, fullName: String, phoneNumber: String, email: String, password: String, confirmPass: String, role: String) {
         if (fullName.isEmpty() || phoneNumber.isEmpty() || email.isEmpty() || password.isEmpty() || confirmPass.isEmpty()) {
-            _authState.value = "Vui lòng nhập đầy đủ thông tin!"
+            showMessage("Vui lòng nhập đầy đủ thông tin!")
             return
         }
         if (password != confirmPass) {
-            _authState.value = "Mật khẩu nhập lại không khớp!"
+            showMessage("Mật khẩu nhập lại không khớp!")
             return
         }
 
-        _authState.value = "Đợi xí, đang xử lý..."
+        setLoading(true)
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -123,11 +149,15 @@ class AuthViewModel : ViewModel() {
                                     .putString("user_role", syncedRole)
                                     .putString("firebase_uid", uid)
                                     .apply()
-                                _authState.value = "Đăng ký thành công!"
+                                setLoading(false)
+                                _events.trySend(AuthUiEvent.ShowMessage("Đăng ký thành công!"))
+                                _events.trySend(AuthUiEvent.RegistrationCompleted)
                             } catch (e: Exception) {
-                                _authState.value = "Tạo tài khoản thành công nhưng lỗi database: ${e.message}."
+                                showMessage("Tạo tài khoản thành công nhưng lỗi database: ${e.message}.")
                             }
                         }
+                    } else {
+                        showMessage("Tạo tài khoản thành công nhưng không lấy được Firebase UID.")
                     }
                 } else {
                     val error = task.exception
@@ -144,15 +174,15 @@ class AuthViewModel : ViewModel() {
                                         val syncedRole = syncUserProfile(fullName, phoneNumber, role)
                                         triggerLoginSuccessByRole(context, syncedRole)
                                     } catch (e: Exception) {
-                                        _authState.value = "Đăng nhập được nhưng chưa đồng bộ hồ sơ MySQL: ${e.message}"
+                                        showMessage("Đăng nhập được nhưng chưa đồng bộ hồ sơ MySQL: ${e.message}")
                                     }
                                 }
                             } else {
-                                _authState.value = "Email đã có trong Firebase nhưng mật khẩu vừa nhập không đăng nhập được. Hãy dùng mật khẩu cũ hoặc phương thức đã đăng ký (ví dụ Google)."
+                                showMessage("Email đã có trong Firebase nhưng mật khẩu vừa nhập không đăng nhập được. Hãy dùng mật khẩu cũ hoặc phương thức đã đăng ký (ví dụ Google).")
                             }
                         }
                     } else {
-                        _authState.value = "Không thể tạo tài khoản: ${error?.localizedMessage ?: "lỗi không xác định"}"
+                        showMessage("Không thể tạo tài khoản: ${error?.localizedMessage ?: "lỗi không xác định"}")
                     }
                 }
             }
@@ -160,11 +190,11 @@ class AuthViewModel : ViewModel() {
 
     fun loginUser(context: Context, email: String, password: String) {
         if (email.isEmpty() || password.isEmpty()) {
-            _authState.value = "Vui lòng không để trống Email/Password!"
+            showMessage("Vui lòng không để trống Email/Password!")
             return
         }
 
-        _authState.value = "Loading..."
+        setLoading(true)
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -176,12 +206,14 @@ class AuthViewModel : ViewModel() {
                                 if (role == "restaurant") logLogin(uid)
                                 triggerLoginSuccessByRole(context, role)
                             } catch (e: Exception) {
-                                _authState.value = "Lỗi kết nối phân quyền: ${e.message}"
+                                showMessage("Lỗi kết nối phân quyền: ${e.message}")
                             }
                         }
+                    } else {
+                        showMessage("Đăng nhập thành công nhưng không lấy được Firebase UID.")
                     }
                 } else {
-                    _authState.value = "Sai tài khoản hoặc mật khẩu!"
+                    showMessage("Sai tài khoản hoặc mật khẩu!")
                 }
             }
     }
@@ -205,12 +237,15 @@ class AuthViewModel : ViewModel() {
             .apply()
         FirebasePushService.syncCurrentToken()
 
-        when (role) {
-            "admin" -> _authState.value = "Đăng nhập Admin thành công!"
-            "restaurant" -> _authState.value = "Đăng nhập Restaurant thành công!"
-            "shipper" -> _authState.value = "Đăng nhập Shipper thành công!"
-            else -> _authState.value = "Đăng nhập User thành công!"
+        val successMessage = when (role) {
+            "admin" -> "Đăng nhập Admin thành công!"
+            "restaurant" -> "Đăng nhập Restaurant thành công!"
+            "shipper" -> "Đăng nhập Shipper thành công!"
+            else -> "Đăng nhập User thành công!"
         }
+        setLoading(false)
+        _events.trySend(AuthUiEvent.ShowMessage(successMessage))
+        _events.trySend(AuthUiEvent.Authenticated(role))
     }
 
     fun logoutUser(context: Context) {
@@ -218,10 +253,8 @@ class AuthViewModel : ViewModel() {
         // ✅ XÓA ROLE KHI ĐĂNG XUẤT
         val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         sharedPrefs.edit().remove("user_role").remove("firebase_uid").apply()
-        _authState.value = "Đã đăng xuất!"
-    }
-
-    fun clearAuthState() {
-        _authState.value = ""
+        setLoading(false)
+        _events.trySend(AuthUiEvent.ShowMessage("Đã đăng xuất!"))
+        _events.trySend(AuthUiEvent.LoggedOut)
     }
 }

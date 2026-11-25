@@ -1,4 +1,4 @@
-package com.example.dacs_3_composer.feature.auth.register
+package com.example.dacs_3_composer.feature.auth.presentation.register
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +39,7 @@ import com.example.dacs_3_composer.R
 @Composable
 fun RegisterScreen(
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
     onRegisterClick: (String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _ -> },
     onNavigateToLogin: () -> Unit = {}
 ) {
@@ -296,6 +297,7 @@ fun RegisterScreen(
                     onClick = {
                         onRegisterClick(fullName, phoneNumber, email, password, confirmPassword, roleKeys[selectedRoleIndex])
                     },
+                    enabled = !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -315,7 +317,7 @@ fun RegisterScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Đăng ký",
+                            text = if (isLoading) "Đang xử lý..." else "Đăng ký",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White

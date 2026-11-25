@@ -19,14 +19,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.dacs_3_composer.feature.admin.MainRouteContainerAdmin
-import com.example.dacs_3_composer.feature.auth.AuthViewModel
-import com.example.dacs_3_composer.feature.auth.login.LoginScreen
-import com.example.dacs_3_composer.feature.auth.register.RegisterScreen
+import com.example.dacs_3_composer.feature.auth.presentation.AuthViewModel
+import com.example.dacs_3_composer.feature.auth.presentation.AuthUiEvent
+import com.example.dacs_3_composer.feature.auth.presentation.login.LoginScreen
+import com.example.dacs_3_composer.feature.auth.presentation.register.RegisterScreen
 import com.example.dacs_3_composer.feature.customer.MainRouteContainerUser
 import com.example.dacs_3_composer.feature.restaurant.MainRouteContainerRestaurant
 import com.example.dacs_3_composer.feature.shipper.MainRouteContainerShipper
@@ -46,8 +47,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             DACS_3_ComposerTheme {
                 val navController = rememberNavController()
-                val authViewModel: AuthViewModel = viewModel()
-                val authState by authViewModel.authState.collectAsState()
+                val authViewModel: AuthViewModel = hiltViewModel()
+                val authUiState by authViewModel.uiState.collectAsState()
                 val context = LocalContext.current
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
@@ -121,38 +122,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(authState) {
-                    if (authState.isNotBlank() && authState != "Loading..." && authState != "Đang kết nối với Google...") {
-                        Toast.makeText(context, authState, Toast.LENGTH_SHORT).show()
-                        when (authState) {
-                            "Đăng nhập User thành công!" -> {
+                LaunchedEffect(authViewModel) {
+                    authViewModel.events.collect { event ->
+                        when (event) {
+                            is AuthUiEvent.ShowMessage -> Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                            is AuthUiEvent.Authenticated -> {
                                 requestNotificationPermission()
-                                navController.navigate("main_user") { popUpTo("login") { inclusive = true } }
-                                authViewModel.clearAuthState()
+                                val destination = when (event.role) {
+                                    "admin" -> "main_admin"
+                                    "restaurant", "seller" -> "main_restaurant"
+                                    "shipper", "driver" -> "main_shipper"
+                                    else -> "main_user"
+                                }
+                                navController.navigate(destination) { popUpTo("login") { inclusive = true } }
                             }
-                            "Đăng nhập Restaurant thành công!" -> {
-                                requestNotificationPermission()
-                                navController.navigate("main_restaurant") { popUpTo("login") { inclusive = true } }
-                                authViewModel.clearAuthState()
-                            }
-                            "Đăng nhập Shipper thành công!" -> {
-                                requestNotificationPermission()
-                                navController.navigate("main_shipper") { popUpTo("login") { inclusive = true } }
-                                authViewModel.clearAuthState()
-                            }
-                            "Đăng nhập Admin thành công!" -> {
-                                requestNotificationPermission()
-                                navController.navigate("main_admin") { popUpTo("login") { inclusive = true } }
-                                authViewModel.clearAuthState()
-                            }
-                            "Đăng ký thành công!" -> {
-                                navController.popBackStack()
-                                authViewModel.clearAuthState()
-                            }
-                            "Đã đăng xuất!" -> {
-                                navController.navigate("login") { popUpTo(0) { inclusive = true } }
-                                authViewModel.clearAuthState()
-                            }
+                            AuthUiEvent.RegistrationCompleted -> navController.popBackStack()
+                            AuthUiEvent.LoggedOut -> navController.navigate("login") { popUpTo(0) { inclusive = true } }
                         }
                     }
                 }
@@ -168,6 +153,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable("login") {
                             LoginScreen(
+                                isLoading = authUiState.isLoading,
                                 onLoginClick = { email, password ->
                                     authViewModel.loginUser(context, email, password)
                                 },
@@ -182,6 +168,7 @@ class MainActivity : ComponentActivity() {
 
                         composable("register") {
                             RegisterScreen(
+                                isLoading = authUiState.isLoading,
                                 onRegisterClick = { fullName, phoneNumber, email, password, confirmPass, role ->
                                     authViewModel.registerUser(context, fullName, phoneNumber, email, password, confirmPass, role)
                                 },
