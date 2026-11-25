@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:foodhubtest;MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-test.sql
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+foodhub:
+  firebase:
+    project-id: foodhub-test-project

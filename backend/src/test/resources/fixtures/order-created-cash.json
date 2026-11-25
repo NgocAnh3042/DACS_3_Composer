@@ -1,0 +1,9 @@
+{
+  "id": "__ORDER_ID__",
+  "data": {
+    "id": "__ORDER_ID__",
+    "status": "PENDING",
+    "totalPrice": 60000.00,
+    "restaurantId": "10"
+  }
+}

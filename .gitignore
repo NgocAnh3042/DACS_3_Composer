@@ -18,6 +18,8 @@ local.properties
 /backenddd/config.local.php
 .codex-gradle-home/
 backend/.codex-gradle-home/
+backend/.gradle-task/
 backend/build/
 backend/.gradle/
+backend/.idea/
 .idea/

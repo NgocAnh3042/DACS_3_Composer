@@ -1,0 +1,1 @@
+{"data":[{"id":"50","code":"TEST10","imageUrl":"https://img.example.test/voucher.png","type":"percentage","value":10.0,"maxDiscount":20000.0,"minOrderValue":50000.0,"usageCount":2,"usageLimit":100,"description":"Khuyến mãi kiểm thử","title":"Giảm 10%","status":"active","startDate":null,"endDate":null}]}
