@@ -14,11 +14,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
-import okhttp3.ConnectionPool
-import okhttp3.OkHttpClient
 import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -123,19 +119,17 @@ object FoodHubClient {
             }
         }).create()
 
-    val api: FoodHubApi by lazy {
+    private val retrofit by lazy {
         val authInterceptor = FirebaseAuthInterceptor(::resolveFastIdToken)
-        val client = OkHttpClient.Builder()
-            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
-            .addInterceptor(authInterceptor)
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .writeTimeout(25, TimeUnit.SECONDS)
-            .build()
-        Retrofit.Builder().baseUrl(baseUrl).client(client)
-            .addConverterFactory(GsonConverterFactory.create(gson)).build()
-            .create(FoodHubApi::class.java)
+        NetworkModule.createRetrofit(baseUrl, NetworkModule.createOkHttpClient(authInterceptor), gson)
     }
+
+    // Grouped services are the preferred entry point for new code. The generic API remains
+    // available while existing callers are migrated incrementally in later refactor stages.
+    val authApi: AuthApi by lazy { retrofit.create(AuthApi::class.java) }
+    val orderApi: OrderApi by lazy { retrofit.create(OrderApi::class.java) }
+    val restaurantApi: RestaurantApi by lazy { retrofit.create(RestaurantApi::class.java) }
+    val api: FoodHubApi by lazy { retrofit.create(FoodHubApi::class.java) }
 
     suspend fun <T> listTyped(resource: String, itemClass: Class<T>, filters: Map<String, String>): List<T> {
         val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()

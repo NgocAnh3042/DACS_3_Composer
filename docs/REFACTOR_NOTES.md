@@ -69,8 +69,18 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Refactor network có nguy cơ ảnh hưởng cả API Firebase/token và các luồng hỗ trợ thời gian phản hồi dài (AI); phải giữ interceptor timeout/auth hiện hữu và chạy build/test sau từng giai đoạn.
 - Hiện `domain/` và `di/` rỗng nhưng đây chưa phải bằng chứng mọi code cũ không còn cần thiết; không xóa module/tệp khác nếu chưa tìm consumer.
 
-## 5. Xác nhận bước khảo sát
+## 5. Trạng thái bước khảo sát
 
 - Đã đọc cấu trúc Android, Gradle/dependencies, manifest, network client/interceptor, cấu hình token và các call site trực tiếp tiêu biểu.
-- Chưa sửa mã ứng dụng, chưa chạy build/test và chưa tạo commit trong bước khảo sát này.
-- Chờ người dùng duyệt kế hoạch trước khi bắt đầu Giai đoạn 1.
+- Bước khảo sát ban đầu không sửa mã ứng dụng và không chạy build/test.
+- Người dùng đã xác nhận kế hoạch; Giai đoạn 1 được ghi riêng bên dưới.
+
+## 6. Giai đoạn 1 — network/config (26/11/2026)
+
+- Đã thêm `data/remote/NetworkModule.kt` làm điểm tạo chung OkHttp/Retrofit cho FoodHub API; giữ nguyên interceptor Firebase, connection pool và timeout hiện tại.
+- Đã thêm `AuthApi`, `OrderApi`, `RestaurantApi` trong `ApiServices.kt`. `FoodHubApi` tổng quát vẫn còn để tương thích; code hiện hữu chưa được chuyển hàng loạt sang interface mới.
+- Logger chỉ được gắn vào debug; chỉ ghi method, HTTP status/thời gian hoặc loại exception. Không ghi URL/path, query, header, body, token hay nội dung exception.
+- Thêm manifest/resource overlay cho debug để cho phép HTTP khi cần backend local trong mạng nội bộ. Release tiếp tục dùng manifest/resource chính, chặn cleartext. Ngrok vẫn dùng HTTPS.
+- Giữ các flavor `local` và `alwaysdata`, BuildConfig URL, API contract, auth header, và timeout như trước.
+- Kết quả: `assembleDebug` thành công, đóng gói `alwaysdataDebug` và `localDebug`. Hai tác vụ `testAlwaysdataDebugUnitTest` và `testLocalDebugUnitTest` thành công. `testDebugUnitTest` không chạy được riêng vì Gradle báo mơ hồ giữa hai flavor; đã chạy hai tác vụ cụ thể thay thế.
+- Còn lại có chủ đích: các ViewModel/Screen chưa được migrate sang service nhóm; sẽ chuyển từng feature ở giai đoạn presentation/repository. Chưa chạy trên thiết bị điện thoại.

@@ -1,6 +1,6 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Tài liệu mô tả hiện trạng và đích refactor; phần đích không có nghĩa là đã triển khai.
+Cập nhật: 26/11/2026. Giai đoạn 1 network đã hoàn tất; phần đích bên dưới vẫn là mục tiêu chưa triển khai.
 
 ## Hiện trạng
 
@@ -9,16 +9,20 @@ flowchart TD
     User[Người dùng] --> Screen[Jetpack Compose Screen]
     Screen --> VM[ViewModel / StateFlow]
     VM --> Repo[Repository, nếu feature dùng]
-    VM -. một số nơi gọi trực tiếp .-> API[FoodHubClient / Retrofit]
-    Screen -. một số call site cũ gọi trực tiếp .-> API
-    Repo --> API
-    API -->|Firebase ID token + HTTPS| PHP[PHP API: Alwaysdata hoặc local qua ngrok]
+    VM -. một số nơi gọi trực tiếp .-> Client[FoodHubClient]
+    Screen -. một số call site cũ gọi trực tiếp .-> Client
+    Repo --> Client
+    Client --> Network[NetworkModule: OkHttp + Retrofit]
+    Network --> Groups[AuthApi / OrderApi / RestaurantApi; FoodHubApi cũ vẫn giữ]
+    Groups -->|Firebase ID token + URL theo flavor| PHP[PHP API: Alwaysdata hoặc local qua ngrok]
     PHP --> DB[(TiDB Cloud)]
     VM --> Firebase[Firebase Auth / Realtime Database / FCM]
     Repo --> External[Cloudinary / API dịch vụ ngoài]
 ```
 
 Hiện trạng là kiến trúc phân lớp một phần, chưa phải Clean Architecture hoàn chỉnh: `domain/`, `di/` và `data/mapper/` đang rỗng; không có Hilt; Screen/ViewModel/Repository chưa tuân theo một đường truy cập dữ liệu duy nhất.
+
+Network đã có một điểm tạo Retrofit/OkHttp chung. Logger an toàn chỉ bật ở debug. Manifest chính chặn cleartext; source set debug có overlay cho phép cleartext nếu backend local dùng HTTP. Các API service nhóm đã được khai báo, còn `FoodHubApi` tổng quát được giữ để chuyển caller dần mà không đổi hành vi.
 
 ## Đích sau refactor (chưa triển khai)
 
