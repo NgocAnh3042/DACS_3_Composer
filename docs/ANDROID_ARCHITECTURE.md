@@ -1,6 +1,6 @@
 # Kiến trúc Android — trạng thái khảo sát
 
-Cập nhật: 26/11/2026. Network/config, domain, DTO/error, Hilt và các lát auth, customer search/home/cart presentation đã qua build/unit test. Cart đã dùng `CartUiState`/`StateFlow`, nhưng vẫn gọi API/Firebase trực tiếp; các feature khác vẫn chưa chuyển.
+Cập nhật: 26/11/2026. Network/config, domain, DTO/error, Hilt và các lát auth, customer search/home/cart/order presentation đã qua build/unit test. Cart dùng `CartUiState`/`StateFlow`; Order đã chuyển package nhưng còn các luồng state riêng và API trực tiếp.
 
 ## Hiện trạng
 

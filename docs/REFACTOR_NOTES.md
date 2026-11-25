@@ -136,3 +136,10 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 - Giữ `CartViewModel` do `MainRouteContainerUser` tạo và truyền vào các route để giỏ tiếp tục được chia sẻ như trước; không đổi đặt hàng, tính phí, voucher hay lưu địa chỉ.
 - Ban đầu chỉ sắp xếp package; tiếp đó thêm `CartUiState` dùng `StateFlow`, chuyển Cart/Home/DishDetail/RestaurantDetail sang thu thập state lifecycle-aware và thay thao tác ghi thông tin quán bằng hàm ViewModel. Giữ nguyên API và Firebase call trực tiếp, chưa tách repository/use case hoặc one-shot event.
 - Kết quả sau hai thay đổi: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Có cảnh báo deprecated icon sẵn trong `CartScreen`; chưa test trên điện thoại.
+
+## 14. Giai đoạn 5 — customer order presentation package (26/11/2026)
+
+- Chuyển `OrderScreen`, `OrderDetailScreen` và `OrderViewModel` vào `feature/customer/order/presentation/`; cập nhật route customer và import `OrderViewModel` trong màn theo dõi đơn.
+- Giữ các component giao diện trong `order/components/` và giữ tracking/map trong package hiện tại vì phần đó có consumer riêng. Không đổi polling, lọc trạng thái, hủy đơn hoặc điều hướng.
+- ViewModel đã có các `StateFlow` riêng; chưa gộp thành `OrderUiState`, chưa chuyển API sang repository, chưa thay cơ chế chia sẻ/lifecycle của ViewModel.
+- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Các cảnh báo icon/Locale deprecated đã có trong màn hình; chưa test thiết bị.

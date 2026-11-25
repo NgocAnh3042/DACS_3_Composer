@@ -26,9 +26,9 @@ import androidx.navigation.navDeepLink
 import com.example.dacs_3_composer.R
 import com.example.dacs_3_composer.core.model.Restaurant
 import com.example.dacs_3_composer.feature.customer.home.presentation.HomeScreen
-import com.example.dacs_3_composer.feature.customer.order.OrderScreen
-import com.example.dacs_3_composer.feature.customer.order.OrderDetailScreen
-import com.example.dacs_3_composer.feature.customer.order.OrderViewModel
+import com.example.dacs_3_composer.feature.customer.order.presentation.OrderScreen
+import com.example.dacs_3_composer.feature.customer.order.presentation.OrderDetailScreen
+import com.example.dacs_3_composer.feature.customer.order.presentation.OrderViewModel
 import com.example.dacs_3_composer.feature.customer.profile.ProfileScreen
 import com.example.dacs_3_composer.feature.customer.profileRestaurant.RestaurantDetailScreen
 import com.example.dacs_3_composer.feature.customer.search.presentation.SearchScreen

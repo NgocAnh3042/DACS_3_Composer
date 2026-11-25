@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.dacs_3_composer.R
-import com.example.dacs_3_composer.feature.customer.order.OrderViewModel
+import com.example.dacs_3_composer.feature.customer.order.presentation.OrderViewModel
 import com.example.dacs_3_composer.feature.customer.orderDaital.components.DriverMapSection
 import com.example.dacs_3_composer.feature.customer.orderDaital.components.OrderSummarySection
 import com.example.dacs_3_composer.feature.customer.orderDaital.components.TimelineNode
