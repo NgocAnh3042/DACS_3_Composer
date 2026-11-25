@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dacs_3_composer.core.model.RestaurantDetail
 import com.example.dacs_3_composer.core.model.Dish
-import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.data.repository.StaleListRepository
 import com.example.dacs_3_composer.domain.usecase.RecordSearchQueryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import java.util.Locale
 
 // Class bọc món ăn kết hợp tên nhà hàng để hiển thị lên UI
@@ -24,7 +30,8 @@ data class SearchDishWrapper(
 data class SearchUiState(
     val restaurantResults: List<RestaurantDetail> = emptyList(),
     val dishResults: List<SearchDishWrapper> = emptyList(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val refreshFailed: Boolean = false
 )
 
 @HiltViewModel
@@ -36,14 +43,17 @@ class SearchViewModel @Inject constructor(
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
     private var lastRecordedQuery: String? = null
+    private var searchJob: Job? = null
 
     fun searchRestaurantsAndDishes(query: String) {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isBlank()) {
+            searchJob?.cancel()
             _uiState.value = SearchUiState()
             return
         }
 
+        searchJob?.cancel()
         _uiState.value = _uiState.value.copy(isLoading = true)
         val lowercaseQuery = trimmedQuery.lowercase(Locale.getDefault())
 
@@ -55,30 +65,35 @@ class SearchViewModel @Inject constructor(
             }
         }
 
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
-                val allRestaurants = FoodHubClient.list<RestaurantDetail>("stores")
-                val allDishes = FoodHubClient.list<Dish>("dishes")
-                val restaurantResults = allRestaurants.filter { restaurant ->
-                    restaurant.name.contains(lowercaseQuery, ignoreCase = true) ||
-                        restaurant.description.contains(lowercaseQuery, ignoreCase = true)
+                delay(250)
+                combine(
+                    StaleListRepository.observe("stores", RestaurantDetail::class.java),
+                    StaleListRepository.observe("dishes", Dish::class.java)
+                ) { stores, dishes -> stores to dishes }.collect { (storeSnapshot, dishSnapshot) ->
+                    val (restaurantResults, dishResults) = withContext(Dispatchers.Default) {
+                        val restaurants = storeSnapshot.items.filter { restaurant ->
+                            restaurant.name.contains(lowercaseQuery, ignoreCase = true) || restaurant.description.contains(lowercaseQuery, ignoreCase = true)
+                        }
+                        val restaurantNames = storeSnapshot.items.associate { it.id to it.name }
+                        val dishMatches = dishSnapshot.items.filter { dish ->
+                            dish.name.contains(lowercaseQuery, ignoreCase = true) || dish.description.contains(lowercaseQuery, ignoreCase = true)
+                        }.map { dish -> SearchDishWrapper(dish, restaurantNames[dish.restaurantId] ?: "Cửa hàng đối tác") }
+                        restaurants to dishMatches
+                    }
+                    _uiState.value = SearchUiState(
+                        restaurantResults = restaurantResults,
+                        dishResults = dishResults,
+                        isLoading = (storeSnapshot.refreshing || dishSnapshot.refreshing) && storeSnapshot.updatedAt == null && dishSnapshot.updatedAt == null,
+                        refreshFailed = storeSnapshot.refreshError || dishSnapshot.refreshError
+                    )
                 }
-                val dishResults = allDishes.filter { dish ->
-                    dish.name.contains(lowercaseQuery, ignoreCase = true) ||
-                        dish.description.contains(lowercaseQuery, ignoreCase = true)
-                }.map { dish ->
-                    SearchDishWrapper(dish, allRestaurants.firstOrNull { it.id == dish.restaurantId }?.name ?: "Cửa hàng đối tác")
-                }
-                _uiState.value = SearchUiState(
-                    restaurantResults = restaurantResults,
-                    dishResults = dishResults,
-                    isLoading = false
-                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("SearchViewModel", "Lỗi truy vấn MySQL: ${e.message}", e)
-                _uiState.value = SearchUiState()
-            } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.value = _uiState.value.copy(isLoading = false, refreshFailed = true)
             }
         }
     }

@@ -191,7 +191,7 @@ fun RestaurantManageScreen(
                 }
 
                 // Phần 4: Danh sách món ăn
-                items(dishes) { dish ->
+                items(dishes, key = { it.id }) { dish ->
 //                    Để sản phẩm vào và vẽ ra kiểu để hiển thị món ăn
                     DishRowManageItem(
                         dish = dish,

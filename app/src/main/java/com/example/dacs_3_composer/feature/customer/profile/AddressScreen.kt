@@ -114,7 +114,7 @@ fun AddressScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(addresses) { address ->
+                    items(addresses, key = { it.id }) { address ->
                         AddressItemCard(
                             address = address,
                             onEditClick = {

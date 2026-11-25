@@ -4,10 +4,10 @@ Backend PHP online trên **Alwaysdata**, dùng PDO MySQL/TLS để lưu dữ li�
 
 ## Mã nguồn và bản đang chạy
 
-- Mã nguồn: backend/ trong Android project.
+- Mã nguồn: backenddd/ trong Android project.
 - Bản online: https://chinh.alwaysdata.net/food-delivery-api/api/; public /home/chinh/www/food-delivery-api; cấu hình riêng /home/chinh/private/foodhub.
 - Router: api/index.php; schema: database/schema.sql; migration: migration/.
-- Cấu hình ưu tiên config.local.php, rồi config.runtime.local.php, cuối cùng config.example.php. Backend .gitignore loại các file cấu hình local và service account. Bản source hiện dùng config.runtime.local.php..
+- Cấu hình ưu tiên `config.local.php`, rồi `config.runtime.local.php`, cuối cùng `config.example.php`. `backenddd/.gitignore` loại các file cấu hình local và service account. Checkout dùng `config.runtime.local.php` để chuẩn bị bundle.
 - Android project không cần đặt trong htdocs.
 - Bản clone mới dùng API online sẵn khi chạy Android. Nếu tự chạy backend, sao chép config.example.php thành config.local.php rồi tự điền TiDB/Firebase/PayOS; service account đặt ngoài repository và trỏ bằng biến môi trường FOODHUB_FIREBASE_SERVICE_ACCOUNT hoặc đường dẫn trong cấu hình local. Mẫu không chứa khóa thật.
 - Kết nối TiDB trên hosting dùng helper TLS `database/connection.php`, chứng chỉ `certs/isrgrootx1.pem`, công cụ chỉ đọc `tools/check-database.php`. Xem mục TiDB trong hướng dẫn local. Chỉ đổi khối mysql, giữ cấu hình PayOS/Firebase.

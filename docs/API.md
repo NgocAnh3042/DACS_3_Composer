@@ -6,7 +6,7 @@ Từ 19/11/2026, `POST ai/meal-advisor` nhận thêm `history` tùy chọn, tố
 
 **Tối ưu Alwaysdata 16/11/2026:** `POST ai/meal-advisor` cho customer/admin active, Firebase Bearer token. Giữ payload `message`, `budget`, `budgetScope` (`food`/`total`) và tối đa ba thẻ món thật. Giữ Gemini 4 Hydrogen theo người dùng; một lượt model chọn ID, bộ lọc đơn giản trả ngay, cache riêng tài khoản 5 phút, ngắt chờ Google sau 5,5 giây và dùng kết quả lọc có thông báo rõ. Thêm source/cacheHit/geminiMs/elapsedMs/fallbackReason, tương thích APK hiện tại. Google còn có lúc trả 429/timeout; không coi bộ lọc là câu trả lời Gemini. Xem [AI_MEAL_ADVISOR.md](AI_MEAL_ADVISOR.md).
 
-Nguồn: `backend/api/index.php`, đối chiếu ngày 12/11/2026. Đây là danh mục implementation hiện có, không phải đặc tả của toàn bộ PRD.
+Nguồn: `backenddd/api/index.php`, đối chiếu ngày 12/11/2026. Đây là danh mục implementation hiện có, không phải đặc tả của toàn bộ PRD.
 
 Cập nhật ngày 14/11/2026: endpoint/JSON giữ nguyên, **host đã chuyển sang Alwaysdata**, backend dùng `food_delivery_app` trên TiDB Cloud qua PDO MySQL/TLS. PayOS confirm-webhook đã xác nhận URL mới; mã Android đã đổi BASE_URL. App đã cài trước đó cần build/cài lại. Xem ALWAYSDATA và SESSION_HANDOFF.
 
@@ -19,6 +19,10 @@ Cập nhật ngày 14/11/2026: endpoint/JSON giữ nguyên, **host đã chuyển
 - `GET /` là health check không cần đăng nhập. `OPTIONS` xử lý preflight. `POST /payos/webhook` dùng chữ ký PayOS thay Bearer token.
 
 Không gửi token hoặc các khóa dịch vụ vào nội dung tài liệu, issue hay log chia sẻ.
+
+### PHP built-in server local
+
+Khi chạy `php -S 0.0.0.0:8080 -t backenddd backenddd/router.php`, Android dùng base URL `/api/`. Router local đổi URI này sang dạng `/food-delivery-api/api/` trước khi gọi `api/index.php`, vì bộ tách route PHP hiện tại cần tiền tố đó. Apache/Alwaysdata giữ URL `/food-delivery-api/api/` trực tiếp. `OPTIONS` trả 204 trước bước tách route nên chỉ chứng minh router/preflight phản hồi, không chứng minh endpoint nghiệp vụ đã được phân giải đúng.
 
 ## 2. Dạng phản hồi
 

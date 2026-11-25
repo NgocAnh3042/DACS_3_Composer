@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -43,6 +44,7 @@ fun AllDishesScreen(
     onDish: (Dish) -> Unit
 ) {
     var keyword by rememberSaveable { mutableStateOf("") }
+    var visibleDishLimit by rememberSaveable(selectedCategory, keyword) { mutableIntStateOf(20) }
 
     val resolvedCategories = remember(dishes, categories) {
         categories.ifEmpty { HomeViewModel.buildCategories(dishes) }
@@ -200,14 +202,20 @@ fun AllDishesScreen(
                 }
             }
         } else {
+            val visibleDishes = remember(filteredDishes, visibleDishLimit) { filteredDishes.take(visibleDishLimit) }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredDishes, key = { it.id }) { dish ->
+                items(visibleDishes, key = { it.id }) { dish ->
                     DeliciousDishItem(dish = dish, onClick = { onDish(dish) })
+                }
+                if (visibleDishes.size < filteredDishes.size) {
+                    item(key = "load-more-dishes", span = { GridItemSpan(maxLineSpan) }) {
+                        TextButton(onClick = { visibleDishLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm món") }
+                    }
                 }
             }
         }

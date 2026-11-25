@@ -30,21 +30,35 @@ class ChatRepository(
 
     fun getConversations(myRole: String = "user"): Flow<List<Conversation>> = flow {
         if (currentUid.isBlank()) { emit(emptyList()); return@flow }
+        var lastSuccessful: List<Conversation>? = null
         while (true) {
-            runCatching { FoodHubClient.list<Conversation>("conversations") }
-                .onSuccess { emit(it) }
-                .onFailure { emit(emptyList()) }
-            delay(3_000)
+            val current = runCatching { FoodHubClient.list<Conversation>("conversations") }.getOrNull()
+            if (current != null) {
+                emit(current)
+                val unchanged = current == lastSuccessful
+                lastSuccessful = current
+                delay(if (unchanged) 10_000 else 3_000)
+            } else {
+                lastSuccessful?.let { emit(it) }
+                delay(if (lastSuccessful == null) 3_000 else 10_000)
+            }
         }
     }
 
     fun getMessages(conversationId: String, limit: Long = 50): Flow<List<ChatMessage>> = flow {
         if (conversationId.isBlank()) { emit(emptyList()); return@flow }
+        var lastSuccessful: List<ChatMessage>? = null
         while (true) {
-            runCatching { FoodHubClient.list<ChatMessage>("conversations/$conversationId/messages", mapOf("limit" to limit.toString())) }
-                .onSuccess { emit(it) }
-                .onFailure { emit(emptyList()) }
-            delay(2_000)
+            val current = runCatching { FoodHubClient.list<ChatMessage>("conversations/$conversationId/messages", mapOf("limit" to limit.toString())) }.getOrNull()
+            if (current != null) {
+                emit(current)
+                val unchanged = current == lastSuccessful
+                lastSuccessful = current
+                delay(if (unchanged) 8_000 else 2_000)
+            } else {
+                lastSuccessful?.let { emit(it) }
+                delay(if (lastSuccessful == null) 2_000 else 8_000)
+            }
         }
     }
 

@@ -26,6 +26,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.core.model.Conversation
 import com.example.dacs_3_composer.core.model.User
@@ -40,6 +44,13 @@ fun MessageCenterScreen(
     onBackClick: () -> Unit
 ) {
     val viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, viewModel) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.startConversations()
+            try { awaitCancellation() } finally { viewModel.stopConversations() }
+        }
+    }
     val allConversations by viewModel.conversations.collectAsState()
     val usersInfo by viewModel.usersInfo.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
@@ -120,7 +131,7 @@ fun MessageCenterScreen(
             )
 
             LazyRow(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(filters) { filter ->
+                items(filters, key = { it }) { filter ->
                     FilterChip(
                         selected = selectedFilter == filter,
                         onClick = { selectedFilter = filter },
@@ -135,7 +146,7 @@ fun MessageCenterScreen(
                 if (filteredConversations.isEmpty()) {
                     item { Box(Modifier.fillMaxWidth().padding(top = 100.dp), contentAlignment = Alignment.Center) { Text("Không có cuộc trò chuyện nào", color = Color.Gray) } }
                 } else {
-                    items(filteredConversations) { conversation ->
+                    items(filteredConversations, key = { it.id }) { conversation ->
                         val otherUid = conversation.participants.firstOrNull { it != currentUid }
                         ChatItem(
                             conversation = conversation,

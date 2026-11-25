@@ -50,11 +50,11 @@ Các phiên bản trên là **khai báo nguồn**. Một số thư viện đư�
 
 - PHP online chạy trên Alwaysdata (CLI đã kiểm tra 8.4.27), sử dụng PDO MySQL, OpenSSL, JSON và cURL/HTTPS streams.
 - API chính `https://chinh.alwaysdata.net/food-delivery-api/api/`; public `/home/chinh/www/food-delivery-api`, config/service account/CA/cache ngoài web tại `/home/chinh/private/foodhub`. PHP timezone Asia/Ho_Chi_Minh, session database +07:00.
-- API hiện tập trung trong `backend/api/index.php`; chưa phải Laravel hoặc một backend tách service/controller đầy đủ.
-- Database đang dùng: TiDB Cloud `8.0.11-TiDB-v8.5.3-serverless`, **`food_delivery_app`**, 32 bảng; TLS xác minh bằng ISRG Root X1 và session timezone `+07:00`. `backend/database/connection.php` dùng chung cho API và công cụ kiểm tra CLI.
+- API hiện tập trung trong `backenddd/api/index.php`; chưa phải Laravel hoặc một backend tách service/controller đầy đủ.
+- Database đang dùng: TiDB Cloud `8.0.11-TiDB-v8.5.3-serverless`, **`food_delivery_app`**, 32 bảng; TLS xác minh bằng ISRG Root X1 và session timezone `+07:00`. `backenddd/database/connection.php` dùng chung cho API và công cụ kiểm tra CLI.
 - Bản import `food_delivery` trên TiDB thiếu AUTO_INCREMENT của 27 bảng; đã tạo database mới từ DDL local, chép dữ liệu giữ ID và xác minh trước chuyển cấu hình. Không dùng bản import đó cho ghi dữ liệu ứng dụng.
 - MariaDB 10.4.32 local giữ nguyên để đối chiếu/khôi phục; không tự đồng bộ hai chiều với TiDB.
-- `backend/database/schema.sql` định nghĩa quan hệ, khóa ngoại, unique key, trạng thái và dữ liệu khởi tạo có trong file.
+- `backenddd/database/schema.sql` định nghĩa quan hệ, khóa ngoại, unique key, trạng thái và dữ liệu khởi tạo có trong file.
 - Bản backend đang chạy và bản nguồn là **hai thư mục khác nhau**. Các cấu hình và cache theo máy không được coi là mã nguồn có thể sao chép mù quáng.
 
 ## 4. Quyền và danh tính

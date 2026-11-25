@@ -323,7 +323,7 @@
 
                         // Món ăn đã chọn
                         item { Text(text = "Món ăn đã chọn", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.Gray, modifier = Modifier.padding(start = 4.dp)) }
-                        items(cartItems) { item ->
+                        items(cartItems, key = { it.dish.id }) { item ->
                             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     AsyncImage(model = item.dish.imageUrl, contentDescription = null, modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
@@ -420,7 +420,7 @@
                                 Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Text("Bạn chưa lưu địa chỉ nào.", color = Color.Gray) }
                             } else {
                                 LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(savedAddressesList.size) { index ->
+                                    items(savedAddressesList.size, key = { savedAddressesList[it].id.ifBlank { "address-$it" } }) { index ->
                                         val info = savedAddressesList[index]
                                         val isSelected = currentAddress == info.address && currentPhone == info.phone && currentName == info.name
                                         Card(
@@ -517,7 +517,7 @@
                                 }
                             }
 
-                            items(listPromotionsFromFirebase) { promo ->
+                            items(listPromotionsFromFirebase, key = { it.id }) { promo ->
                                 val isSelected = selectedPromotion?.id == promo.id
                                 val duDieuKienNhanma = totalDishPrice >= promo.minOrderValue
 

@@ -49,3 +49,10 @@ function foodhubInvalidateJsonCache(string ...$prefixes): void {
         }
     }
 }
+
+/** Parse a bounded, backward-compatible limit/offset pair for list endpoints. */
+function foodhubPagination(int $defaultLimit = 100, int $maximumLimit = 200): array {
+    $limit = isset($_GET['limit']) && is_numeric($_GET['limit']) ? (int)$_GET['limit'] : $defaultLimit;
+    $offset = isset($_GET['offset']) && is_numeric($_GET['offset']) ? (int)$_GET['offset'] : 0;
+    return [max(1, min($maximumLimit, $limit)), max(0, min(1000000, $offset))];
+}

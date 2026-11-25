@@ -8,8 +8,8 @@ Luồng xử lý vẫn giữ nguyên tương thích 100% với Android client (`
 
 ```
 User Message (+ conversationId, history)
-  -> backend/api/index.php (Firebase ID token auth -> MySQL account & role)
-  -> backend/ai/meal-advisor-route.php
+  -> backenddd/api/index.php (Firebase ID token auth -> MySQL account & role)
+  -> backenddd/ai/meal-advisor-route.php
      -> ConversationContext (sliding window 4 lượt + rolling summary + PII redaction)
      -> FoodHubSupport (intent, emotion, dynamic pronoun, brevity, role-scoped SQL)
      -> FoodHubSystemPrompt (official 15-section System Prompt + multi-turn PromptBuilder)
@@ -20,20 +20,20 @@ User Message (+ conversationId, history)
 
 ### Danh sách file đã tạo / chỉnh sửa
 - **Tạo mới**:
-  - `backend/ai/FoodHubSystemPrompt.php`: Tách riêng System Prompt chính thức (FoodHub AI — minh bạch là trợ lý AI, 70% thân thiện / 30% chuyên nghiệp, 15 nguyên tắc + ví dụ phong cách) và `buildMessages()` dựng hội thoại multi-turn.
-  - `backend/ai/ConversationContext.php`: Quản lý sliding context window, tóm tắt hội thoại cũ (`orderId`, `topic`, `issue`, `pronoun`, `confirmedActions`, `unresolvedQuestion`, `awaitingTicketConfirmation`, `awaitingCancellationConfirmation`), nhận diện xưng hô nhất quán (`anh`/`chị`/`bạn`/`mình`), nhận diện yêu cầu ngắn gọn (`preferBrief`), và ẩn dữ liệu nhạy cảm (OTP, mật khẩu, email, SĐT, số thẻ).
-  - `backend/tests/foodhub_conversation_120_test.php`: Bộ kiểm thử tự động 120 trường hợp (6 nhóm × 20 tình huống) qua SQLite in-memory + pipeline `FoodHubSupport` / `ConversationContext` / `FoodHubSystemPrompt` / `MealAdvisor`.
+  - `backenddd/ai/FoodHubSystemPrompt.php`: Tách riêng System Prompt chính thức (FoodHub AI — minh bạch là trợ lý AI, 70% thân thiện / 30% chuyên nghiệp, 15 nguyên tắc + ví dụ phong cách) và `buildMessages()` dựng hội thoại multi-turn.
+  - `backenddd/ai/ConversationContext.php`: Quản lý sliding context window, tóm tắt hội thoại cũ (`orderId`, `topic`, `issue`, `pronoun`, `confirmedActions`, `unresolvedQuestion`, `awaitingTicketConfirmation`, `awaitingCancellationConfirmation`), nhận diện xưng hô nhất quán (`anh`/`chị`/`bạn`/`mình`), nhận diện yêu cầu ngắn gọn (`preferBrief`), và ẩn dữ liệu nhạy cảm (OTP, mật khẩu, email, SĐT, số thẻ).
+  - `backenddd/tests/foodhub_conversation_120_test.php`: Bộ kiểm thử tự động 120 trường hợp (6 nhóm × 20 tình huống) qua SQLite in-memory + pipeline `FoodHubSupport` / `ConversationContext` / `FoodHubSystemPrompt` / `MealAdvisor`.
 - **Chỉnh sửa**:
-  - `backend/ai/MealAdvisor.php`: Rút gọn `humanizeSupport()` gọi `FoodHubSystemPrompt::buildMessages()`, sửa 2 lỗi false-positive ở guardrail ETA (cho phép nhắc lại thời gian khách đã đợi, vẫn chặn bịa ETA tương lai) và guardrail hoàn tiền (cho phép câu phủ định trung thực "chưa xác nhận đã hoàn tiền"), bổ sung guardrail chống tự nhận người thật, chống lộ key/prompt, lọc emoji vui khi khách tức giận, thêm `temperature: 0.6`.
-  - `backend/ai/FoodHubSupport.php`: Mở rộng `normalize()` (tiếng lóng, viết tắt `dc`, `mk/mik`, `tks/thx`, `ib`, `rep/trl`, `lun`, `dzay`), mở rộng `intent()` và `detectEmotion()` (8 trạng thái, sửa lỗi `hài long` có dấu trong chuỗi folded), sửa bug `(bool)preg_match` cho `$accountIncident`, cho `identity` đi qua `dispatch($humanize, ...)`, bổ sung ngữ cảnh đa lượt ("ừ đúng rồi", "vậy còn bao lâu", "thế hủy đi", "nếu lâu quá thì sao") và đọc `orderId` từ `summary`.
-  - `backend/ai/meal-advisor-route.php`: Tích hợp `ConversationContext`, giữ lịch sử client khi phiên mới chưa có trên server, giải phóng `$memoryLock` trong `finally`.
-  - `backend/deploy/deploy-meal-advisor.py`: Bổ sung `ai/FoodHubSystemPrompt.php` và `ai/ConversationContext.php` vào danh sách triển khai.
+  - `backenddd/ai/MealAdvisor.php`: Rút gọn `humanizeSupport()` gọi `FoodHubSystemPrompt::buildMessages()`, sửa 2 lỗi false-positive ở guardrail ETA (cho phép nhắc lại thời gian khách đã đợi, vẫn chặn bịa ETA tương lai) và guardrail hoàn tiền (cho phép câu phủ định trung thực "chưa xác nhận đã hoàn tiền"), bổ sung guardrail chống tự nhận người thật, chống lộ key/prompt, lọc emoji vui khi khách tức giận, thêm `temperature: 0.6`.
+  - `backenddd/ai/FoodHubSupport.php`: Mở rộng `normalize()` (tiếng lóng, viết tắt `dc`, `mk/mik`, `tks/thx`, `ib`, `rep/trl`, `lun`, `dzay`), mở rộng `intent()` và `detectEmotion()` (8 trạng thái, sửa lỗi `hài long` có dấu trong chuỗi folded), sửa bug `(bool)preg_match` cho `$accountIncident`, cho `identity` đi qua `dispatch($humanize, ...)`, bổ sung ngữ cảnh đa lượt ("ừ đúng rồi", "vậy còn bao lâu", "thế hủy đi", "nếu lâu quá thì sao") và đọc `orderId` từ `summary`.
+  - `backenddd/ai/meal-advisor-route.php`: Tích hợp `ConversationContext`, giữ lịch sử client khi phiên mới chưa có trên server, giải phóng `$memoryLock` trong `finally`.
+  - `backenddd/deploy/deploy-meal-advisor.py`: Bổ sung `ai/FoodHubSystemPrompt.php` và `ai/ConversationContext.php` vào danh sách triển khai.
 
 ## 2. Kết quả kiểm thử (Trước vs Sau khi tinh chỉnh)
 
 Lệnh chạy:
 ```powershell
-C:\php82\php.exe -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backend/tests/foodhub_conversation_120_test.php
+C:\php82\php.exe -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backenddd/tests/foodhub_conversation_120_test.php
 ```
 
 ### So sánh kết quả 120 trường hợp

@@ -39,18 +39,25 @@ app/src/main/java/com/example/dacs_3_composer/
   feature/admin/           Thống kê, tài khoản, voucher, hồ sơ admin
   feature/chat/            Danh sách hội thoại và chat
   feature/shared/location/ Tìm địa chỉ, GPS và bản đồ chọn vị trí
-backend/
+backenddd/
   api/index.php            Router và xử lý API PHP
   database/schema.sql      Định nghĩa 32 bảng
   migration/               Thay đổi schema cho DB đã tồn tại
+backend/
+  build.gradle.kts         Skeleton Spring Boot, chưa được Android sử dụng
 docs/                      Tài liệu dự án
 ```
+
+## Cấu trúc backend
+
+- `backenddd/` chứa PHP API đang chạy thật: đây là mã nguồn dùng cho API trên Alwaysdata và để chạy local qua ngrok.
+- `backend/` là skeleton Spring Boot riêng, hiện chưa được Android app sử dụng. Android gọi API PHP qua `FoodHubApi.kt`.
 
 ## Bắt đầu nhanh
 
 1. Mở **thư mục gốc dự án** bằng Android Studio.
 2. Kiểm tra [API online](https://chinh.alwaysdata.net/food-delivery-api/api/), cần nhận `database: connected`.
-3. `FoodHubClient.BASE_URL` hiện trỏ Alwaysdata..
+3. Chọn `alwaysdataDebug` để gọi API Alwaysdata; chọn `localDebug` để dùng URL ngrok khai báo trong `backend.local.properties`.
 4. Build/cài bản app mới để dùng URL mới; ứng dụng cũ chưa tự đổi endpoint.
 5. Tài khoản admin thử là `admin@gmail.com`, sử dụng mật khẩu đã được cung cấp trong cuộc trao đổi tạo tài khoản.
 

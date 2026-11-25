@@ -29,6 +29,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 interface FoodHubApi {
     @GET("{resource}") suspend fun list(@Path(value = "resource", encoded = true) resource: String, @QueryMap filters: Map<String, String> = emptyMap()): Response<JsonObject>
@@ -133,41 +135,41 @@ object FoodHubClient {
     val api: FoodHubApi by lazy { retrofit.create(FoodHubApi::class.java) }
 
     suspend fun <T> listTyped(resource: String, itemClass: Class<T>, filters: Map<String, String>): List<T> {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-        val ttl = computeCacheTtlMs(resource, filters)
-        val cacheKey = if (ttl > 0L) "$resource:list:$uid:${filters.entries.sortedBy { it.key }.joinToString("&") { "${it.key}=${it.value}" }}" else ""
-        if (ttl > 0L) {
-            val hit = responseCache[cacheKey]
-            if (hit != null && System.currentTimeMillis() < hit.expiresAtMs && hit.json.isJsonArray) {
-                return hit.json.asJsonArray.map { gson.fromJson(it, itemClass) }
+        return withContext(Dispatchers.IO) {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            val ttl = computeCacheTtlMs(resource, filters)
+            val cacheKey = if (ttl > 0L) "$resource:list:$uid:${filters.entries.sortedBy { it.key }.joinToString("&") { "${it.key}=${it.value}" }}" else ""
+            if (ttl > 0L) {
+                val hit = responseCache[cacheKey]
+                if (hit != null && System.currentTimeMillis() < hit.expiresAtMs && hit.json.isJsonArray) {
+                    return@withContext hit.json.asJsonArray.map { gson.fromJson(it, itemClass) }
+                }
             }
+            val response = api.list(resource, filters)
+            if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
+            val array = response.body()?.getAsJsonArray("data") ?: JsonArray()
+            if (ttl > 0L) responseCache[cacheKey] = CacheEntry(array, System.currentTimeMillis() + ttl)
+            array.map { gson.fromJson(it, itemClass) }
         }
-        val response = api.list(resource, filters)
-        if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
-        val array = response.body()?.getAsJsonArray("data") ?: JsonArray()
-        if (ttl > 0L) {
-            responseCache[cacheKey] = CacheEntry(array, System.currentTimeMillis() + ttl)
-        }
-        return array.map { gson.fromJson(it, itemClass) }
     }
 
     suspend fun <T> getTyped(resource: String, id: String, itemClass: Class<T>): T {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-        val ttl = computeCacheTtlMs(resource, emptyMap())
-        val cacheKey = if (ttl > 0L) "$resource:get:$uid:$id" else ""
-        if (ttl > 0L) {
-            val hit = responseCache[cacheKey]
-            if (hit != null && System.currentTimeMillis() < hit.expiresAtMs) {
-                return gson.fromJson(hit.json, itemClass)
+        return withContext(Dispatchers.IO) {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            val ttl = computeCacheTtlMs(resource, emptyMap())
+            val cacheKey = if (ttl > 0L) "$resource:get:$uid:$id" else ""
+            if (ttl > 0L) {
+                val hit = responseCache[cacheKey]
+                if (hit != null && System.currentTimeMillis() < hit.expiresAtMs) {
+                    return@withContext gson.fromJson(hit.json, itemClass)
+                }
             }
+            val response = api.get(resource, id)
+            if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
+            val value = response.body()?.get("data") ?: error("API không trả dữ liệu")
+            if (ttl > 0L) responseCache[cacheKey] = CacheEntry(value, System.currentTimeMillis() + ttl)
+            gson.fromJson(value, itemClass)
         }
-        val response = api.get(resource, id)
-        if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
-        val value = response.body()?.get("data") ?: error("API không trả dữ liệu")
-        if (ttl > 0L) {
-            responseCache[cacheKey] = CacheEntry(value, System.currentTimeMillis() + ttl)
-        }
-        return gson.fromJson(value, itemClass)
     }
 
     suspend fun createObject(resource: String, value: Any?): String {

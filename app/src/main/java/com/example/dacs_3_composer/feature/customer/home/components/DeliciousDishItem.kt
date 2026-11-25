@@ -15,8 +15,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.core.model.Dish
+import com.example.dacs_3_composer.core.image.cloudinaryThumbnail
 import com.example.dacs_3_composer.R
 import java.util.Locale
 
@@ -28,6 +30,7 @@ fun DeliciousDishItem(
     isRecommended: Boolean = false,
     onClick: () -> Unit
 ) {
+    val imageWidthPx = with(LocalDensity.current) { 280.dp.roundToPx() }
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -39,7 +42,7 @@ fun DeliciousDishItem(
         Column(modifier = Modifier.padding(8.dp)) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 AsyncImage(
-                    model = dish.imageUrl.ifBlank { R.drawable.food_pho_v2 },
+                    model = if (dish.imageUrl.isBlank()) R.drawable.food_pho_v2 else cloudinaryThumbnail(dish.imageUrl, imageWidthPx),
                     contentDescription = dish.name,
                     placeholder = painterResource(id = R.drawable.food_pho_v2),
                     error = painterResource(id = R.drawable.food_pho_v2),

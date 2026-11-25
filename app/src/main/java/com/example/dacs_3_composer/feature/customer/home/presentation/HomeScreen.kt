@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.dacs_3_composer.feature.customer.cart.presentation.CartViewModel
+import com.example.dacs_3_composer.core.ui.FoodHubPullToRefresh
 import com.example.dacs_3_composer.feature.customer.home.components.*
 import com.example.dacs_3_composer.feature.customer.search.components.SectionTitle
 import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
@@ -78,6 +80,8 @@ fun HomeScreen(
     val displayedRestaurants = remember(enrichedRestaurants, dishes, selectedCategory) {
         HomeViewModel.filterRestaurantsByCategory(enrichedRestaurants, dishes, selectedCategory)
     }
+    var visibleRestaurantLimit by remember(selectedCategory) { mutableIntStateOf(20) }
+    val visibleRestaurants = remember(displayedRestaurants, visibleRestaurantLimit) { displayedRestaurants.take(visibleRestaurantLimit) }
 
     LaunchedEffect(Unit) {
         homeViewModel.loadHome()
@@ -98,8 +102,13 @@ fun HomeScreen(
         )
     }
 
+    FoodHubPullToRefresh(
+        refreshing = homeUiState.isRefreshing,
+        onRefresh = { homeViewModel.refreshAll() },
+        modifier = modifier.fillMaxSize()
+    ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -211,8 +220,10 @@ fun HomeScreen(
 
         if (homeUiState.dishesLoading && dishes.isEmpty()) {
             item {
-                Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF2159BC))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    repeat(2) {
+                        Surface(Modifier.weight(1f).height(170.dp), shape = RoundedCornerShape(18.dp), color = Color(0xFFE9EDF3)) { }
+                    }
                 }
             }
         } else if (displayedDishes.isEmpty() && selectedCategory != null) {
@@ -261,12 +272,13 @@ fun HomeScreen(
 
         if (isLoading && restaurants.isEmpty()) {
             item {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF1E56A0))
-                }
+                Surface(Modifier.fillMaxWidth().height(150.dp), shape = RoundedCornerShape(16.dp), color = Color(0xFFE9EDF3)) { }
             }
         }
-        items(displayedRestaurants, key = { it.id }) { restaurant ->
+        if (homeUiState.dishesFailed || homeUiState.restaurantsFailed) {
+            item { Text("Đang hiển thị dữ liệu đã lưu; chưa thể làm mới.", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+        }
+        items(visibleRestaurants, key = { it.id }) { restaurant ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -278,5 +290,11 @@ fun HomeScreen(
                 RestaurantItem(restaurant = restaurant)
             }
         }
+        if (visibleRestaurants.size < displayedRestaurants.size) {
+            item(key = "load-more-restaurants") {
+                TextButton(onClick = { visibleRestaurantLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm quán") }
+            }
+        }
+    }
     }
 }

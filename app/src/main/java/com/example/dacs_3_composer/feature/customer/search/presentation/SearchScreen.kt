@@ -44,6 +44,9 @@ fun SearchScreen(
     val restaurantResults = uiState.restaurantResults
     val dishResults = uiState.dishResults
     val isLoading = uiState.isLoading
+    var visibleSearchLimit by remember(searchQuery) { mutableIntStateOf(20) }
+    val visibleRestaurants = remember(restaurantResults, visibleSearchLimit) { restaurantResults.take(visibleSearchLimit) }
+    val visibleDishes = remember(dishResults, visibleSearchLimit) { dishResults.take(visibleSearchLimit) }
 
     // Tính tổng số lượng kết quả tìm kiếm được
     val totalResultsCount = restaurantResults.size + dishResults.size
@@ -64,8 +67,8 @@ fun SearchScreen(
                 .padding(paddingValues)
         ) {
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF2159BC))
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    repeat(3) { Surface(Modifier.fillMaxWidth().height(112.dp), shape = RoundedCornerShape(16.dp), color = Color(0xFFE9EDF3)) { } }
                 }
             } else {
                 LazyColumn(
@@ -73,6 +76,9 @@ fun SearchScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    if (uiState.refreshFailed) {
+                        item { Text("Chưa thể làm mới; đang giữ kết quả đã lưu.", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+                    }
                     // Tiêu đề hiển thị từ khóa thực tế và số lượng kết quả tìm thấy
                     item {
                         SearchResultTitle(
@@ -110,7 +116,7 @@ fun SearchScreen(
                             )
                         }
 
-                        items(restaurantResults) { restaurant ->
+                        items(visibleRestaurants, key = { it.id }) { restaurant ->
                             val coords = com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates
                             val enriched = remember(restaurant, coords) {
                                 com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate.enrichRestaurant(
@@ -129,6 +135,9 @@ fun SearchScreen(
                                 RestaurantItem(restaurant = enriched)
                             }
                         }
+                        if (visibleRestaurants.size < restaurantResults.size) item(key = "more-search-restaurants") {
+                            TextButton(onClick = { visibleSearchLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm quán") }
+                        }
                     }
 
                     // 🎯 PHẦN 2: DANH SÁCH MÓN ĂN / SẢN PHẨM (HIỂN THỊ PHÍA DƯỚI)
@@ -143,7 +152,7 @@ fun SearchScreen(
                             )
                         }
 
-                        items(dishResults) { wrapper ->
+                        items(visibleDishes, key = { it.dish.id }) { wrapper ->
                             SearchDishItem(
                                 wrapper = wrapper,
                                 onItemClick = {
@@ -151,6 +160,9 @@ fun SearchScreen(
                                     navController.navigate("dish_detail/${wrapper.dish.id}")
                                 }
                             )
+                        }
+                        if (visibleDishes.size < dishResults.size) item(key = "more-search-dishes") {
+                            TextButton(onClick = { visibleSearchLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm món") }
                         }
                     }
                 }

@@ -29,12 +29,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.core.model.ChatMessage
 import com.example.dacs_3_composer.core.model.MessageType
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlinx.coroutines.awaitCancellation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,9 +101,15 @@ fun ChatDetailScreen(
         uri?.let { viewModel.sendImageMessage(conversationId, context, it) }
     }
 
-    LaunchedEffect(conversationId) {
-        if (conversationId.isNotEmpty() && !conversationId.contains("support_admin")) {
-            viewModel.loadMessages(conversationId)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, conversationId, viewModel) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.startConversations()
+            if (conversationId.isNotEmpty() && !conversationId.contains("support_admin")) viewModel.loadMessages(conversationId)
+            try { awaitCancellation() } finally {
+                viewModel.stopMessages()
+                viewModel.stopConversations()
+            }
         }
     }
 
@@ -199,7 +209,7 @@ fun ChatDetailScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(messages) { message ->
+                    items(messages, key = { it.messageId.ifBlank { "${it.senderId}-${it.createdAt.seconds}-${it.content.hashCode()}" } }) { message ->
                         MessageBubble(message = message, isCurrentUser = message.senderId == currentUid)
                     }
                 }

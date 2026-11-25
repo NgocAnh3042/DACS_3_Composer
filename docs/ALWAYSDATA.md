@@ -33,20 +33,20 @@ Gói Free chỉ dành học tập/demo phi thương mại. Không tự nâng c�
 
 ## Công cụ và khóa
 
-- `backend/deploy/prepare-alwaysdata.php`: đọc cấu hình TiDB hiện có, tạo bundle trong `build/alwaysdata-deploy/bundle` (Git bỏ qua). Chỉ chép whitelist tệp runtime, không chép Android project, SQL data, tài liệu hoặc toàn bộ XAMPP.
+- `backenddd/deploy/prepare-alwaysdata.php`: đọc cấu hình TiDB hiện có, tạo bundle trong `build/alwaysdata-deploy/bundle` (Git bỏ qua). Chỉ chép whitelist tệp runtime, không chép Android project, SQL data, tài liệu hoặc toàn bộ XAMPP.
 - Bundle private giữ mật khẩu DB, khóa PayOS, Firebase service account và CA. Các tệp này chỉ đưa vào `/home/chinh/private/foodhub`, quyền folder 0700/file 0600. Public config.local.php chỉ là wrapper tới file riêng, HTTP bị .htaccess chặn.
-- `backend/deploy/alwaysdata.py`: Paramiko SFTP có xác minh fingerprint SHA256 trước xác thực mật khẩu; hỗ trợ probe/deploy/check. Nếu dashboard hiển thị RSA thay ED25519, thử các thuật toán nhưng vẫn bắt buộc khớp fingerprint đã được người dùng cung cấp; không tự tin cậy key không khớp.
-- Mật khẩu trong `backend/deploy/alwaysdata.password.local.txt`, chỉ nội dung mật khẩu SSH, không thêm nhãn hoặc dấu ngoặc. Fingerprint từ **Remote access > SSH/SFTP > Display fingerprints** trong `alwaysdata.hostkey.local.txt`. Hai file được Git bỏ qua, không in nội dung ra log.
+- `backenddd/deploy/alwaysdata.py`: Paramiko SFTP có xác minh fingerprint SHA256 trước xác thực mật khẩu; hỗ trợ probe/deploy/check. Nếu dashboard hiển thị RSA thay ED25519, thử các thuật toán nhưng vẫn bắt buộc khớp fingerprint đã được người dùng cung cấp; không tự tin cậy key không khớp.
+- Mật khẩu trong `backenddd/deploy/alwaysdata.password.local.txt`, chỉ nội dung mật khẩu SSH, không thêm nhãn hoặc dấu ngoặc. Fingerprint từ **Remote access > SSH/SFTP > Display fingerprints** trong `alwaysdata.hostkey.local.txt`. Hai file được Git bỏ qua, không in nội dung ra log.
 - Python dependency cài riêng trong `build/alwaysdata-deploy/python-libs`, không thay Python hệ thống. Công cụ không lưu mật khẩu vào tham số dòng lệnh.
-- `backend/runtime.php` chọn cache directory ngoài web trên hosting. API đặt timezone từ config, mặc định Asia/Ho_Chi_Minh để khớp session TiDB +07:00. Cache cũ local vẫn dùng thư mục temp nếu chưa cấu hình riêng.
+- `backenddd/runtime.php` chọn cache directory ngoài web trên hosting. API đặt timezone từ config, mặc định Asia/Ho_Chi_Minh để khớp session TiDB +07:00. Cache cũ local vẫn dùng thư mục temp nếu chưa cấu hình riêng.
 - Đã sửa lỗi webhook cũ: lấy rowCount từ PDOStatement sau UPDATE payment, không gọi PDO::rowCount. Chưa coi thanh toán thật đã được kiểm thử chỉ vì code này đã sửa.
 
 ## Thứ tự triển khai
 
 ```powershell
-& 'C:\xampp\php\php.exe' .\backend\deploy\prepare-alwaysdata.php
-python .\backend\deploy\alwaysdata.py probe
-python .\backend\deploy\alwaysdata.py deploy
+& 'C:\xampp\php\php.exe' .\backenddd\deploy\prepare-alwaysdata.php
+python .\backenddd\deploy\alwaysdata.py probe
+python .\backenddd\deploy\alwaysdata.py deploy
 ```
 
 1. Xác minh home, PHP, web root và fingerprint. Không thử lại mật khẩu sai liên tục.

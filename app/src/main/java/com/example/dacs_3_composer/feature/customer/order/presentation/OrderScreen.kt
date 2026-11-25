@@ -9,12 +9,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import com.example.dacs_3_composer.core.ui.FoodHubPullToRefresh
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +47,7 @@ fun OrderScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var visibleOrderLimit by remember(selectedTabIndex) { mutableIntStateOf(20) }
     val context = LocalContext.current
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -49,6 +57,13 @@ fun OrderScreen(
     val ongoingOrders by orderViewModel.ongoingOrders.collectAsState()
     val historyOrders by orderViewModel.historyOrders.collectAsState()
     val isLoading by orderViewModel.isLoading.collectAsState()
+    val isRefreshing by orderViewModel.isRefreshing.collectAsState()
+    val refreshFailed by orderViewModel.refreshFailed.collectAsState()
+    val pendingOrders = remember(ongoingOrders) { ongoingOrders.filter { it.status.equals("PENDING_PAYMENT", true) || it.status.equals("PENDING", true) } }
+    val activeOrders = remember(ongoingOrders) { ongoingOrders.filter { it.status.trim().uppercase() in setOf("PROCESSING", "ACCEPTED", "SHIPPING") } }
+    val visiblePendingOrders = remember(pendingOrders, visibleOrderLimit) { pendingOrders.take(visibleOrderLimit) }
+    val visibleActiveOrders = remember(activeOrders, visibleOrderLimit) { activeOrders.take(visibleOrderLimit) }
+    val visibleHistoryOrders = remember(historyOrders, visibleOrderLimit) { historyOrders.take(visibleOrderLimit) }
 
     Scaffold(
         topBar = {
@@ -83,22 +98,29 @@ fun OrderScreen(
                 OrderTabBar(selectedTabIndex = selectedTabIndex, onTabSelected = { selectedTabIndex = it })
 
                 if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFF2159BC))
+                    val transition = rememberInfiniteTransition(label = "order-skeleton")
+                    val alpha by transition.animateFloat(0.35f, 0.75f, infiniteRepeatable(tween(750), RepeatMode.Reverse), label = "order-skeleton-alpha")
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(3, key = { "order-skeleton-$it" }) {
+                            Card(modifier = Modifier.fillMaxWidth().height(136.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                                Box(Modifier.fillMaxSize().padding(16.dp).background(Color(0xFFE7ECF3).copy(alpha = alpha), RoundedCornerShape(12.dp)))
+                            }
+                        }
                     }
                 } else {
+                    FoodHubPullToRefresh(
+                        refreshing = isRefreshing,
+                        onRefresh = { orderViewModel.refreshOrders() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (refreshFailed) item { Text("Chưa thể làm mới; đang giữ dữ liệu đã lưu.", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
                         when (selectedTabIndex) {
                             0 -> { 
-                                val pendingOrders = ongoingOrders.filter { 
-                                    val s = it.status.uppercase().trim()
-                                    s == "PENDING_PAYMENT" || s == "PENDING"
-                                }
-
                                 if (pendingOrders.isEmpty()) {
                                     item { EmptyOrderState() }
                                 } else {
-                                    items(pendingOrders) { order ->
+                                    items(visiblePendingOrders, key = { it.id }) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val imgUrl = order.restaurantCoverImage
                                         val currentStatus = order.status.uppercase().trim()
@@ -156,13 +178,12 @@ fun OrderScreen(
                                             }
                                         }
                                     }
+                                    if (visiblePendingOrders.size < pendingOrders.size) item(key = "more-pending-orders") {
+                                        TextButton(onClick = { visibleOrderLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm đơn") }
+                                    }
                                 }
                             }
                             1 -> { 
-                                val activeOrders = ongoingOrders.filter { 
-                                    val s = it.status.uppercase().trim()
-                                    s == "PROCESSING" || s == "ACCEPTED" || s == "SHIPPING"
-                                }
                                 if (activeOrders.isEmpty()) {
                                     item {
                                         Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
@@ -170,7 +191,7 @@ fun OrderScreen(
                                         }
                                     }
                                 } else {
-                                    items(activeOrders) { order ->
+                                    items(visibleActiveOrders, key = { it.id }) { order ->
                                         val itemsSummaryText = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val imgUrl = order.restaurantCoverImage
                                         val currentStatus = order.status.uppercase().trim()
@@ -209,6 +230,9 @@ fun OrderScreen(
                                             }
                                         }
                                     }
+                                    if (visibleActiveOrders.size < activeOrders.size) item(key = "more-active-orders") {
+                                        TextButton(onClick = { visibleOrderLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm đơn") }
+                                    }
                                 }
                             }
                             2 -> { 
@@ -219,7 +243,7 @@ fun OrderScreen(
                                         }
                                     }
                                 } else {
-                                    items(historyOrders) { order ->
+                                    items(visibleHistoryOrders, key = { it.id }) { order ->
                                         val historyItemsSummary = order.items.joinToString(", ") { "${it.quantity}x ${it.name}" }
                                         val s = order.status.uppercase().trim()
                                         val displayStatus = if (s == "CANCELLED") " - đã bị hủy" else " - đã được giao thành công"
@@ -237,9 +261,13 @@ fun OrderScreen(
                                             onDetailClick = { chuyenHienThiTrangChiTiet(order.id) }
                                         )
                                     }
+                                    if (visibleHistoryOrders.size < historyOrders.size) item(key = "more-history-orders") {
+                                        TextButton(onClick = { visibleOrderLimit += 20 }, modifier = Modifier.fillMaxWidth()) { Text("Tải thêm đơn") }
+                                    }
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

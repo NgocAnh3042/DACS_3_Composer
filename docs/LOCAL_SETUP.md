@@ -8,19 +8,31 @@ Mở thư mục có `settings.gradle.kts`. `local.properties` trỏ SDK của m�
 
 ### Chạy app qua ngrok
 
-Chọn `localDebug`. Tạo `backend.local.properties` từ file mẫu và đặt `apiBaseUrl` thành `https://<domain-ngrok>/food-delivery-api/api/`. Backend local cần cấu hình Firebase AnChinGo (`dacs3-anchin-go`) và TiDB Cloud trong `backend/config.local.php`.
+`backenddd/` là PHP API đang dùng. Để chạy API local, cần tạo cấu hình riêng từ mẫu: sao chép `backenddd/config.example.php` thành `backenddd/config.local.php`, rồi tự điền cấu hình TiDB Cloud và Firebase cần thiết. Nếu dùng các tính năng thanh toán/AI, điền cấu hình tương ứng theo mẫu. Không đưa giá trị bí mật vào tài liệu, log hoặc Git.
 
-Từ thư mục gốc dự án, chạy PHP API và ngrok ở hai cửa sổ PowerShell:
+Chọn `localDebug`, tạo `backend.local.properties` từ `backend.local.properties.example` và đặt `apiBaseUrl` thành `https://<domain-ngrok>/api/` (phải kết thúc bằng `/`). `backend.local.properties` nằm ở thư mục gốc dự án; Gradle đọc file này để tạo URL cho flavor `local`. Từ thư mục gốc dự án, chạy PHP built-in server trên cổng 8080:
 
 ```powershell
-php -S 127.0.0.1:8080 -t backend backend/router.php
+php -S 0.0.0.0:8080 -t backenddd backenddd/router.php
 ```
+
+Trong cửa sổ PowerShell thứ hai, mở tunnel tới **cùng cổng 8080**:
 
 ```powershell
 ngrok http 8080 --url https://<domain-ngrok-cua-ban>
 ```
 
-Kiểm tra `http://127.0.0.1:8080/food-delivery-api/api/` trả `database: connected`, rồi Sync Gradle và cài lại `localDebug`. Nếu dùng `alwaysdataDebug`, app gọi URL Alwaysdata và không cần mở PHP/ngrok local; cấu hình Firebase của backend Alwaysdata phải khớp Firebase project đang dùng.
+Thay `<domain-ngrok-cua-ban>` bằng domain được cấp trên ngrok. Đặt domain HTTPS đó vào `apiBaseUrl` trong `backend.local.properties`, giữ hậu tố `/api/`. Built-in server dùng `backenddd/` làm document root nên URL nội bộ tương ứng là `http://127.0.0.1:8080/api/`. Router chuẩn hóa URI `/api/*` thành dạng `/food-delivery-api/api/*` mà bộ tách route hiện tại trong `api/index.php` cần; các file tĩnh trong document root vẫn được phục vụ bình thường. Sync Gradle rồi build/cài lại `localDebug` sau khi đổi URL. Nếu chọn `alwaysdataDebug`, app gọi API Alwaysdata; không cần mở PHP/ngrok local.
+
+## Khắc phục lỗi thường gặp
+
+| Biểu hiện | Cách kiểm tra |
+| --- | --- |
+| Ngrok báo offline hoặc app không kết nối được | Giữ PHP server chạy ở cổng 8080; mở cửa sổ PowerShell khác chạy `ngrok http 8080 --url https://<domain-ngrok-cua-ban>`. Kiểm tra trạng thái `online` và domain Forwarding trùng host trong `backend.local.properties`. |
+| API báo route không tìm thấy | Đảm bảo đang chạy đúng lệnh có `-t backenddd backenddd/router.php`; đường dẫn app phải có `/api/`. Luồng đồng bộ hồ sơ Android hiện gửi `POST /api/users` (các bản gọi `/api/users/me` cũng được dispatcher hỗ trợ). PHP router chuyển `/api/*` vào `backenddd/api/index.php`; API trả `API route chưa được hỗ trợ` khi path/method không nằm trong dispatcher. |
+| `apiBaseUrl` sai hoặc vẫn gọi hosting | Kiểm tra đã chọn `localDebug`, `backend.local.properties` ở thư mục gốc và URL có dạng `https://<domain-ngrok>/api/`. Không dùng URL `/food-delivery-api/api/` cho cấu hình local chuẩn vì document root local đã là `backenddd/`. |
+| Đã đổi URL nhưng APK vẫn dùng URL cũ | Trong Android Studio chọn **Sync Project with Gradle Files**, sau đó build và cài lại variant `localDebug`. `FoodHubClient` lấy URL từ `BuildConfig.FOODHUB_API_BASE_URL` được Gradle sinh từ `backend.local.properties`. |
+| Muốn kiểm tra tunnel/router mà không gửi token hoặc gọi DB | Chạy `curl.exe -i -X OPTIONS https://<domain-ngrok>/api/users`; router/API preflight đúng sẽ trả HTTP 204. Bài kiểm tra này chỉ xác nhận ngrok tới được PHP router và xử lý OPTIONS, không kiểm tra đăng nhập hay DB. |
 
 Compile target Java 11 không có nghĩa nên chạy Gradle 9 bằng JDK 11. Ví dụ dùng JBR đi kèm Android Studio trong cửa sổ PowerShell:
 

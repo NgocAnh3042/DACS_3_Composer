@@ -12,6 +12,9 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +32,7 @@ import com.example.dacs_3_composer.data.repository.ChatRepository
 import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
 import com.example.dacs_3_composer.feature.shared.location.rememberUserCoordinates
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 
 @Composable
 fun RestaurantDetailScreen(
@@ -43,8 +47,12 @@ fun RestaurantDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     val userCoords = rememberUserCoordinates()
 
-    LaunchedEffect(restaurantId) {
-        viewModel.fetchStoreDataForUser(restaurantId)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, restaurantId) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.fetchStoreDataForUser(restaurantId)
+            try { awaitCancellation() } finally { viewModel.stopStoreDataObservation() }
+        }
     }
 
     val rawRestaurant = viewModel.restaurantDetail.value
@@ -133,6 +141,11 @@ fun RestaurantDetailScreen(
                     .padding(innerPadding)
                     .background(Color(0xFFF8F9FA))
             ) {
+                if (viewModel.refreshFailed) {
+                    item(key = "cached-data-notice") {
+                        Text("Chưa thể làm mới; đang giữ thực đơn đã lưu.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 item {
                     Box(modifier = Modifier.height(220.dp).fillMaxWidth()) {
                         AsyncImage(
@@ -184,7 +197,7 @@ fun RestaurantDetailScreen(
                     )
                 }
 
-                items(dishes) { dish ->
+                items(dishes, key = { it.id }) { dish ->
                     DishRowUserItem(
                         dish = dish,
                         onAddToCartClick = { onAddToCart(dish) }

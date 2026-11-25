@@ -16,6 +16,7 @@ import com.example.dacs_3_composer.data.repository.ChatRepository
 import com.example.dacs_3_composer.data.repository.UserRepository
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
@@ -40,12 +41,12 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    init {
-        loadConversations()
-    }
+    private var conversationsJob: Job? = null
+    private var messagesJob: Job? = null
 
-    private fun loadConversations() {
-        viewModelScope.launch {
+    fun startConversations() {
+        if (conversationsJob?.isActive == true) return
+        conversationsJob = viewModelScope.launch {
             try {
                 val currentUser = userRepository.getCurrentUser()
                 _userRole.value = currentUser.role
@@ -53,6 +54,8 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
                     _conversations.value = list
                     fetchUsersInfo(list, currentUser.uid)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 repository.getConversations("user").collect { list ->
                     _conversations.value = list
@@ -60,6 +63,8 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
             }
         }
     }
+
+    fun stopConversations() { conversationsJob?.cancel(); conversationsJob = null }
 
     private fun fetchUsersInfo(conversations: List<Conversation>, currentUid: String) {
         viewModelScope.launch {
@@ -78,7 +83,8 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
     }
 
     fun loadMessages(conversationId: String) {
-        viewModelScope.launch {
+        if (messagesJob?.isActive == true) messagesJob?.cancel()
+        messagesJob = viewModelScope.launch {
             if (conversationId.isNotEmpty()) {
                 repository.getMessages(conversationId).collect { msgs ->
                     _messages.value = msgs
@@ -92,6 +98,8 @@ class ChatViewModel(private val repository: ChatRepository) : ViewModel() {
             }
         }
     }
+
+    fun stopMessages() { messagesJob?.cancel(); messagesJob = null }
 
     fun sendMessage(conversationId: String, content: String, type: MessageType = MessageType.TEXT, imageUrl: String? = null) {
         if (conversationId.isBlank()) return

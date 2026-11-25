@@ -1,6 +1,41 @@
 <?php
 declare(strict_types=1);
 
+/** Per-request SQL counter. Values are logged only as aggregate counts. */
+final class FoodHubQueryMetrics {
+    private static int $count = 0;
+    public static function reset(): void { self::$count = 0; }
+    public static function increment(): void { self::$count++; }
+    public static function count(): int { return self::$count; }
+}
+
+final class FoodHubCountingPDOStatement extends PDOStatement {
+    protected function __construct() {}
+    public function execute(?array $params = null): bool {
+        FoodHubQueryMetrics::increment();
+        return parent::execute($params);
+    }
+}
+
+/** PDO subclass counts executed prepare/query/exec calls without logging SQL or values. */
+final class FoodHubPDO extends PDO {
+    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null) {
+        $options = $options ?? [];
+        $options[PDO::ATTR_STATEMENT_CLASS] = [FoodHubCountingPDOStatement::class, []];
+        parent::__construct($dsn, $username, $password, $options);
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        FoodHubQueryMetrics::increment();
+        return parent::query($query, $fetchMode, ...$fetchModeArgs);
+    }
+
+    public function exec(string $statement): int|false {
+        FoodHubQueryMetrics::increment();
+        return parent::exec($statement);
+    }
+}
+
 /** Shared by the HTTP API and the CLI connection check. */
 function foodhubDatabaseOptions(array $mysql): array {
     $options = [
@@ -40,7 +75,7 @@ function foodhubConnectDatabase(array $mysql, bool $reuseForRead = true): PDO {
     }
     $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=$charset";
     try {
-        $pdo = new PDO($dsn, (string)$mysql['username'], (string)$mysql['password'], $options);
+        $pdo = new FoodHubPDO($dsn, (string)$mysql['username'], (string)$mysql['password'], $options);
     } catch (PDOException $error) {
         if (!$reuseForRead) throw $error;
         unset($verifiedPools[$poolKey]);

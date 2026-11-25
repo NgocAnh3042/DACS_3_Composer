@@ -82,7 +82,7 @@ fun PaymentHistoryScreen(onBackClick: () -> Unit) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(payments) { payment ->
+                    items(payments, key = { it.id }) { payment ->
                         PaymentItemCard(payment, localeVN)
                     }
                 }

@@ -10,8 +10,19 @@ if (!is_string($requestPath)) {
     return true;
 }
 
-if ($requestPath === '/api' || str_starts_with($requestPath, '/api/')
-    || preg_match('#^/food-delivery-api/api(?:/|$)#', $requestPath) === 1) {
+if ($requestPath === '/api' || str_starts_with($requestPath, '/api/')) {
+    // api/index.php extracts routes after the hosting prefix `/food-delivery-api/api/`.
+    // Give it that same URI shape locally; otherwise `/api/users` is parsed as
+    // resource `api` because index.php trims the leading slash before extraction.
+    $query = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_QUERY);
+    $normalizedPath = $requestPath === '/api' ? '/api/' : $requestPath;
+    $_SERVER['REQUEST_URI'] = '/food-delivery-api' . $normalizedPath
+        . (is_string($query) && $query !== '' ? '?' . $query : '');
+    require __DIR__ . '/api/index.php';
+    return true;
+}
+
+if (preg_match('#^/food-delivery-api/api(?:/|$)#', $requestPath) === 1) {
     require __DIR__ . '/api/index.php';
     return true;
 }

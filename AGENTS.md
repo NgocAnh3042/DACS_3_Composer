@@ -10,7 +10,7 @@
 ## Các quyết định đã được người dùng chấp nhận
 
 - Dự án Android: `D:\AndroidProjects\DACS_3_Composer`.
-- Backend PHP nguồn: `backend/`; **bản online chính trên Alwaysdata**: `https://chinh.alwaysdata.net/food-delivery-api/api/`, public `/home/chinh/www/food-delivery-api`, cấu hình/khóa `/home/chinh/private/foodhub`. XAMPP `C:\xampp\htdocs\food-delivery-api` giữ làm bản phát triển cũ; không tự đồng bộ đè bản hosting.
+- Backend PHP nguồn: `backenddd/`; **bản online chính trên Alwaysdata**: `https://chinh.alwaysdata.net/food-delivery-api/api/`, public `/home/chinh/www/food-delivery-api`, cấu hình/khóa `/home/chinh/private/foodhub`. XAMPP `C:\xampp\htdocs\food-delivery-api` giữ làm bản phát triển cũ; không tự đồng bộ đè bản hosting.
 - Từ 14/11/2026, API đang chạy dùng **`food_delivery_app` trên TiDB Cloud (MySQL-compatible)** qua PDO MySQL/TLS xác minh CA, session timezone `+07:00`. Bản người dùng import `food_delivery` thiếu AUTO_INCREMENT ở 27 bảng, được giữ lại để đối chiếu; không đổi API về bản đó. MariaDB 10.4.32 / food_delivery trên XAMPP cũng được giữ làm bản cũ, không còn là nguồn ghi chính.
 - Firebase Authentication giữ đăng nhập email/mật khẩu và Google. MySQL giữ hồ sơ và quyền.
 - Firebase Cloud Messaging gửi thông báo; Realtime Database giữ tracking, presence, typing.
@@ -30,8 +30,11 @@
 
 ## Khi thay đổi và xác nhận kết quả
 
+- Mọi thay đổi API phải thực hiện trong `backenddd/` và cập nhật `docs/API.md`.
+- Android gọi API qua `FoodHubApi.kt`; kiểm tra hợp đồng endpoint/DTO khi thay đổi một phía.
+- Không in hoặc commit secret, token, mật khẩu, service-account JSON hay cấu hình riêng.
 - Sửa backend trong repo chưa làm thay đổi bản Apache đang chạy. Đối chiếu và đồng bộ có chủ đích, giữ cấu hình local; không ghi đè toàn bộ bản chạy nếu có thay đổi khác.
-- Cấu hình online: `/home/chinh/private/foodhub/config.local.php`; public config.local chỉ là wrapper. Checkout hiện dùng `backend/config.runtime.local.php` (Git bỏ qua), chỉ để chuẩn bị bundle; không dùng đường dẫn Windows trên hosting. API ưu tiên config.local, rồi config.runtime.local, cuối cùng config.example. SFTP xác minh fingerprint, mật khẩu/fingerprint trong backend/deploy/*.local.txt đều Git bỏ qua; không đưa khóa vào web root. Xem docs/ALWAYSDATA.md.
+- Cấu hình online: `/home/chinh/private/foodhub/config.local.php`; public config.local chỉ là wrapper. Checkout hiện dùng `backenddd/config.runtime.local.php` (Git bỏ qua), chỉ để chuẩn bị bundle; không dùng đường dẫn Windows trên hosting. API ưu tiên config.local, rồi config.runtime.local, cuối cùng config.example. SFTP xác minh fingerprint, mật khẩu/fingerprint trong backenddd/deploy/*.local.txt đều Git bỏ qua; không đưa khóa vào web root. Xem docs/ALWAYSDATA.md.
 - Không đưa khóa PayOS, service-account JSON, token đăng nhập hoặc mật khẩu vào Markdown, log hay commit.
 - Không reset/import/xóa database để sửa một lỗi nhỏ. `schema.sql` không phải hệ thống migration tự động.
 - Kiểm tra phần thay đổi phù hợp: Kotlin/Compose, JUnit, `php -l`, truy vấn DB hoặc thao tác trên thiết bị.

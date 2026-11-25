@@ -225,7 +225,7 @@ fun OrderDetailScreen(
                         }
                     }
 
-                    items(order.items) { item ->
+                    items(order.items, key = { it.dishId.ifBlank { it.name } }) { item ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color.White),

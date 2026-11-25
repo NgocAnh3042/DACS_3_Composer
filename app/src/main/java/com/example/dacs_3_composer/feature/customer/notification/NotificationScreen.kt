@@ -169,7 +169,7 @@ fun NotificationScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredNotifications) { item ->
+                items(filteredNotifications, key = { it.id }) { item ->
                     NotificationCard(item = item)
                 }
             }

@@ -96,7 +96,7 @@ Groq là nền tảng điện toán suy luận siêu tốc (LPU Inference Engine
 
 ## 3. Master System Prompt Cho Groq
 
-Dưới đây là System Prompt chuẩn mực được tích hợp trong `backend/ai/MealAdvisor.php`:
+Dưới đây là System Prompt chuẩn mực được tích hợp trong `backenddd/ai/MealAdvisor.php`:
 
 ```text
 Bạn là Trợ lý Chăm sóc Khách hàng FoodHub (người thật, tận tâm, thấu cảm, chuyên nghiệp).
@@ -152,6 +152,6 @@ Nếu người dùng muốn huấn luyện thêm trọng số riêng (LoRA fine-
 Chạy bộ test tự động kiểm tra toàn diện 10 yếu tố và các chốt an toàn (guardrails):
 
 ```powershell
-php -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backend/tests/foodhub_human_ai_test.php
-php -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backend/tests/foodhub_support_test.php
+php -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backenddd/tests/foodhub_human_ai_test.php
+php -d extension_dir=C:\php82\ext -d extension=mbstring -d extension=pdo_sqlite backenddd/tests/foodhub_support_test.php
 ```

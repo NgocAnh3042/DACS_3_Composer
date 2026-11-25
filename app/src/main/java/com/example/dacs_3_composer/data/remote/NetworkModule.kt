@@ -17,6 +17,12 @@ object RemoteNetworkFactory {
     fun createOkHttpClient(authInterceptor: Interceptor): OkHttpClient =
         OkHttpClient.Builder()
             .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            // Ask API caches to revalidate each response; durable stale data is kept separately
+            // in the account-scoped SQLite repository cache. OkHttp negotiates gzip and HTTP/2
+            // automatically when the server supports them.
+            .addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().header("Cache-Control", "no-cache").build())
+            }
             .addInterceptor(authInterceptor)
             .apply {
                 if (BuildConfig.DEBUG) addInterceptor(SafeNetworkLoggingInterceptor)

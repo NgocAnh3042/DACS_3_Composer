@@ -2,6 +2,7 @@ package com.example.dacs_3_composer.feature.customer.home.presentation
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.core.model.RestaurantDetail
@@ -9,11 +10,18 @@ import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.example.dacs_3_composer.data.repository.PersonalizedRecommendationsResult
 import com.example.dacs_3_composer.data.repository.RecommendationRefreshBus
 import com.example.dacs_3_composer.data.repository.RecommendationRepository
+import com.example.dacs_3_composer.data.repository.StaleListRepository
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import com.google.firebase.auth.FirebaseAuth
@@ -30,7 +38,9 @@ data class HomeUiState(
     val userAddress: String = "",
     val userImageUrl: String = "",
     val dishesLoading: Boolean = false,
-    val dishesFailed: Boolean = false
+    val dishesFailed: Boolean = false,
+    val restaurantsFailed: Boolean = false,
+    val isRefreshing: Boolean = false
 )
 
 @HiltViewModel
@@ -60,29 +70,15 @@ class HomeViewModel @Inject constructor(
     }
 
     fun loadHome() {
-        loadUserData()
-        val needRefreshForSearch = RecommendationRefreshBus.consumeDirty()
-        if (!loadedDishes || needRefreshForSearch) {
-            fetchDeliciousDishes(force = needRefreshForSearch)
-        }
-        if (_uiState.value.restaurantsList.isEmpty()) {
-            fetchAllRestaurants()
-        }
+        RecommendationRefreshBus.consumeDirty()
+        fetchDeliciousDishes(force = true)
+        fetchAllRestaurants()
         viewModelScope.launch {
-            try {
-                val addresses = FoodHubClient.list<com.example.dacs_3_composer.core.model.UserAddress>("addresses")
-                val preferred = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
-                _uiState.value = _uiState.value.copy(
-                    userAddress = preferred?.addressDetail?.ifBlank { preferred.address } ?: ""
+            coroutineScope {
+                awaitAll(
+                    async { fetchHomeUserData() },
+                    async { fetchHomeAddress() }
                 )
-                if (preferred != null &&
-                    com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates == null &&
-                    com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate.isValidCoordinate(preferred.latitude, preferred.longitude)
-                ) {
-                    com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates = preferred.latitude to preferred.longitude
-                }
-            } catch (exception: Exception) {
-                Log.e("HomeViewModel", "Lỗi tải địa chỉ", exception)
             }
         }
     }
@@ -90,20 +86,37 @@ class HomeViewModel @Inject constructor(
     // --- QUẢN LÝ THÔNG TIN NGƯỜI DÙNG ---
     fun loadUserData() {
         if (firebaseAuth.currentUser == null) return
-        viewModelScope.launch {
-            try {
-                val user = FoodHubClient.get<com.example.dacs_3_composer.core.model.User>("users", "me")
-                _uiState.value = _uiState.value.copy(
-                    userName = user.getDisplayName(),
-                    userImageUrl = user.avatarUrl
-                )
-            } catch (exception: Exception) {
-                Log.e("HomeViewModel", "Lỗi lấy hồ sơ từ MySQL: ${exception.message}", exception)
+        viewModelScope.launch { fetchHomeUserData() }
+    }
+
+    private suspend fun fetchHomeUserData() {
+        if (firebaseAuth.currentUser == null) return
+        try {
+            val user = FoodHubClient.get<com.example.dacs_3_composer.core.model.User>("users", "me")
+            _uiState.value = _uiState.value.copy(userName = user.getDisplayName(), userImageUrl = user.avatarUrl)
+        } catch (exception: Exception) {
+            Log.e("HomeViewModel", "Lỗi lấy hồ sơ từ MySQL: ${exception.message}", exception)
+        }
+    }
+
+    private suspend fun fetchHomeAddress() {
+        try {
+            val addresses = FoodHubClient.list<com.example.dacs_3_composer.core.model.UserAddress>("addresses")
+            val preferred = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
+            _uiState.value = _uiState.value.copy(userAddress = preferred?.addressDetail?.ifBlank { preferred.address } ?: "")
+            if (preferred != null &&
+                com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates == null &&
+                com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate.isValidCoordinate(preferred.latitude, preferred.longitude)
+            ) {
+                com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates = preferred.latitude to preferred.longitude
             }
+        } catch (exception: Exception) {
+            Log.e("HomeViewModel", "Lỗi tải địa chỉ", exception)
         }
     }
 
     private var loadedDishes = false
+    private var storesJob: Job? = null
 
     fun ensureDishes() {
         if (!loadedDishes && !_uiState.value.dishesLoading) fetchDeliciousDishes(force = false)
@@ -111,6 +124,11 @@ class HomeViewModel @Inject constructor(
 
     fun refreshDeliciousDishes() {
         fetchDeliciousDishes(force = true)
+    }
+
+    fun refreshAll() {
+        fetchDeliciousDishes(force = true)
+        fetchAllRestaurants()
     }
 
     fun findDishById(dishId: String): Dish? {
@@ -133,52 +151,81 @@ class HomeViewModel @Inject constructor(
         if (!force && loadedDishes && _uiState.value.deliciousDishes.isNotEmpty()) return
         _uiState.value = _uiState.value.copy(dishesLoading = true, dishesFailed = false)
         viewModelScope.launch {
-            try {
-                val dishesDeferred = async { FoodHubClient.list<Dish>("dishes") }
-                val recDeferred = async {
+            val recDeferred = async {
                     runCatching { recommendationRepository.getPersonalizedRecommendations(limit = 20) }
                         .onFailure { Log.w("HomeViewModel", "Fallback không có gợi ý tìm kiếm: ${it.message}") }
                         .getOrNull()
                 }
-                val fetchedDishes = dishesDeferred.await()
-                val recResult = recDeferred.await()
-                allRawDishes = fetchedDishes
-
-                val builtCategories = buildCategories(fetchedDishes)
-                val activeSelected = _uiState.value.selectedCategory
-                if (activeSelected != null && builtCategories.none { it.name.equals(activeSelected, ignoreCase = true) }) {
-                    _uiState.value = _uiState.value.copy(selectedCategory = null)
+            try {
+                StaleListRepository.observe("dishes", Dish::class.java).collect { snapshot ->
+                    val fetchedDishes = snapshot.items
+                    if (fetchedDishes.isNotEmpty() || snapshot.updatedAt != null) {
+                        allRawDishes = fetchedDishes
+                        val builtCategories = withContext(Dispatchers.Default) { buildCategories(fetchedDishes) }
+                        val activeSelected = _uiState.value.selectedCategory
+                        if (activeSelected != null && builtCategories.none { it.name.equals(activeSelected, ignoreCase = true) }) {
+                            _uiState.value = _uiState.value.copy(selectedCategory = null)
+                        }
+                        val composed = withContext(Dispatchers.Default) { composeDeliciousFeed(fetchedDishes, null) }
+                        _uiState.value = _uiState.value.copy(
+                            categories = builtCategories,
+                            deliciousDishes = composed.dishes,
+                            personalizedDishIds = composed.personalizedIds,
+                            isPersonalizedFeed = composed.isPersonalized,
+                            dishesFailed = snapshot.refreshError,
+                            dishesLoading = snapshot.refreshing,
+                            isRefreshing = snapshot.refreshing
+                        )
+                        loadedDishes = true
+                    } else {
+                        _uiState.value = _uiState.value.copy(dishesLoading = snapshot.refreshing, dishesFailed = snapshot.refreshError, isRefreshing = snapshot.refreshing)
+                    }
                 }
-
-                val composed = composeDeliciousFeed(fetchedDishes, recResult)
-                _uiState.value = _uiState.value.copy(
-                    categories = builtCategories,
-                    deliciousDishes = composed.dishes,
-                    personalizedDishIds = composed.personalizedIds,
-                    isPersonalizedFeed = composed.isPersonalized
-                )
-                loadedDishes = true
+                val recResult = recDeferred.await()
+                val currentDishes = allRawDishes
+                if (currentDishes.isNotEmpty()) {
+                    val composed = withContext(Dispatchers.Default) { composeDeliciousFeed(currentDishes, recResult) }
+                    _uiState.value = _uiState.value.copy(
+                        deliciousDishes = composed.dishes,
+                        personalizedDishIds = composed.personalizedIds,
+                        isPersonalizedFeed = composed.isPersonalized
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(dishesFailed = true)
                 Log.e("HomeViewModel", "Lỗi tải món", e)
             } finally {
-                _uiState.value = _uiState.value.copy(dishesLoading = false)
+                _uiState.value = _uiState.value.copy(dishesLoading = false, isRefreshing = false)
+                recDeferred.cancel()
             }
         }
     }
 
     private fun fetchAllRestaurants() {
+        if (storesJob?.isActive == true) return
         _uiState.value = _uiState.value.copy(isLoading = true)
-        viewModelScope.launch {
+        storesJob = viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(restaurantsList = FoodHubClient.list("stores"))
+                StaleListRepository.observe("stores", RestaurantDetail::class.java).collect { snapshot ->
+                    if (snapshot.items.isNotEmpty() || snapshot.updatedAt != null) {
+                        _uiState.value = _uiState.value.copy(restaurantsList = snapshot.items, restaurantsFailed = snapshot.refreshError)
+                    } else if (snapshot.refreshError) {
+                        _uiState.value = _uiState.value.copy(restaurantsFailed = true)
+                    }
+                    _uiState.value = _uiState.value.copy(isLoading = snapshot.refreshing && _uiState.value.restaurantsList.isEmpty())
+                }
+            } catch (exception: kotlinx.coroutines.CancellationException) {
+                throw exception
             } catch (exception: Exception) {
-                Log.e("HomeViewModel", "Lỗi tải cửa hàng từ MySQL: ${exception.message}", exception)
+                Log.e("HomeViewModel", "Lỗi tải cửa hàng từ API: ${exception.message}", exception)
+                _uiState.value = _uiState.value.copy(restaurantsFailed = true, isLoading = false)
             }
-            _uiState.value = _uiState.value.copy(isLoading = false)
         }
     }
 
+    @Immutable
     data class HomeCategory(
         val name: String,
         val dishCount: Int,

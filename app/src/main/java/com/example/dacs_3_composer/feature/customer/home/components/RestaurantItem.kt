@@ -16,8 +16,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
 import com.example.dacs_3_composer.core.model.RestaurantDetail
+import com.example.dacs_3_composer.core.image.cloudinaryThumbnail
 import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
 import java.util.Locale
 
@@ -36,6 +38,7 @@ fun RestaurantItem(
     }
     val distanceText = restaurant.distance.ifBlank { "Chưa rõ vị trí" }
     val feeText = DeliveryEstimate.formatFee(restaurant.shippingFee)
+    val imageWidthPx = with(LocalDensity.current) { 360.dp.roundToPx() }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -45,7 +48,7 @@ fun RestaurantItem(
     ) {
         Column {
             AsyncImage(
-                model = restaurant.coverImage,
+                model = cloudinaryThumbnail(restaurant.coverImage, imageWidthPx),
                 contentDescription = restaurant.name,
                 modifier = Modifier
                     .fillMaxWidth()

@@ -10,6 +10,7 @@ import com.example.dacs_3_composer.data.remote.FoodHubClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -18,13 +19,22 @@ class MenuRepository {
     private val TAG = "MenuRepository"
 
 //    Gọi viewmodel để lấy dữ liệu (callbackFlow lắng nghe nếu tác động thảy đổi để load lại)
-fun getDishes(restaurantId: String, includeUnavailable: Boolean = false): Flow<List<Dish>> = flow {
+fun observeDishes(restaurantId: String, includeUnavailable: Boolean = false): Flow<CachedList<Dish>> = flow {
+    val filters = mapOf("restaurantId" to restaurantId, "includeUnavailable" to if (includeUnavailable) "1" else "0")
     while (true) {
-        try { emit(FoodHubClient.list("dishes", mapOf("restaurantId" to restaurantId, "includeUnavailable" to if (includeUnavailable) "1" else "0"))) }
-        catch (e: Exception) { Log.e(TAG, "Không tải được thực đơn MySQL: ${e.message}"); throw e }
-        delay(5_000)
+        try {
+            StaleListRepository.observe("dishes", Dish::class.java, filters).collect { emit(it) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Không tải được thực đơn API: ${e.message}")
+        }
+        delay(10_000)
     }
 }
+
+fun getDishes(restaurantId: String, includeUnavailable: Boolean = false): Flow<List<Dish>> =
+    observeDishes(restaurantId, includeUnavailable).map { it.items }
 //  Xử lý tải ảnh lên
     suspend fun uploadImage(imageUri: Uri, uploadPreset: String): String = suspendCoroutine { continuation ->
         Log.d(TAG, "Bắt đầu upload ảnh: $imageUri với preset: $uploadPreset")

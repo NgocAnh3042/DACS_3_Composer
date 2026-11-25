@@ -50,8 +50,8 @@ def main():
             'api/index.php',
         ]
         current_index = sftp.open(deploy.PUBLIC + '/api/index.php', 'rb').read()
-        old_index = subprocess.check_output(['git', 'show', 'HEAD:backend/api/index.php'], cwd=deploy.ROOT)
-        new_index = (deploy.ROOT / 'backend/api/index.php').read_bytes()
+        old_index = subprocess.check_output(['git', 'show', 'HEAD:backenddd/api/index.php'], cwd=deploy.ROOT)
+        new_index = (deploy.ROOT / 'backenddd/api/index.php').read_bytes()
         normalize = lambda b: b.replace(b'\r\n', b'\n')
         if not args.allow_router_update and normalize(current_index) not in (normalize(old_index), normalize(new_index)):
             raise RuntimeError('Hosting router differs from both HEAD and local source. Review before deploying.')
@@ -72,10 +72,10 @@ def main():
         # Lint staged code before replacing the public entrypoint.
         for name in files:
             stage = backup + '/candidate/' + name
-            deploy.upload_atomic(sftp, deploy.ROOT / 'backend' / name, stage, 0o600)
+            deploy.upload_atomic(sftp, deploy.ROOT / 'backenddd' / name, stage, 0o600)
             deploy.run(client, 'php -l ' + shlex.quote(stage))
         if args.sync_key:
-            local = deploy.ROOT / 'backend/deploy/groq.apikey.local.txt'
+            local = deploy.ROOT / 'backenddd/deploy/groq.apikey.local.txt'
             key = local.read_text(encoding='utf-8-sig').strip()
             if not key.startswith('gsk_') or any(c.isspace() for c in key):
                 raise ValueError('Invalid local Groq API key format')
@@ -83,8 +83,8 @@ def main():
         for name in files:
             dest = deploy.PUBLIC + '/' + name
             deploy.mkdir(sftp, dest.rsplit('/', 1)[0], 0o755)
-            deploy.upload_atomic(sftp, deploy.ROOT / 'backend' / name, dest, 0o644)
-            expected = hashlib.sha256((deploy.ROOT / 'backend' / name).read_bytes()).hexdigest()
+            deploy.upload_atomic(sftp, deploy.ROOT / 'backenddd' / name, dest, 0o644)
+            expected = hashlib.sha256((deploy.ROOT / 'backenddd' / name).read_bytes()).hexdigest()
             actual = hashlib.sha256(sftp.open(dest, 'rb').read()).hexdigest()
             if actual != expected:
                 raise RuntimeError('Uploaded checksum mismatch')

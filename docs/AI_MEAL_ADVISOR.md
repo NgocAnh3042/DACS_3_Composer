@@ -43,7 +43,7 @@ Trả tối đa ba lựa chọn thay thế nhau cho **một món, một người
 
 ## Khóa Gemini
 
-Tệp riêng trên máy: `backend/config.gemini.local.php`, đã được Git bỏ qua và Apache chặn HTTP. Điền khóa vào chuỗi `api_key`, lưu tệp, không gửi khóa vào chat. Mẫu công khai: `backend/config.gemini.example.php`.
+Tệp riêng trên máy: `backenddd/config.gemini.local.php`, đã được Git bỏ qua và Apache chặn HTTP. Điền khóa vào chuỗi `api_key`, lưu tệp, không gửi khóa vào chat. Mẫu công khai: `backenddd/config.gemini.example.php`.
 
 ```php
 <?php
@@ -78,9 +78,9 @@ Yêu cầu và thông tin món được gửi tới Google khi cần gọi model
 Chỉ chạy sau khi người dùng đồng ý cập nhật hosting. Xem ALWAYSDATA.md về fingerprint và credential riêng.
 
 ```powershell
-python backend/deploy/deploy-meal-advisor.py
+python backenddd/deploy/deploy-meal-advisor.py
 # Sau khi điền khóa, đồng bộ cấu hình riêng:
-python backend/deploy/deploy-meal-advisor.py --sync-key
+python backenddd/deploy/deploy-meal-advisor.py --sync-key
 ```
 
 Dùng SSH fingerprint hiện có, so router hosting với Git HEAD/source, sao lưu ngoài web, lint candidate, upload helper trước router và kiểm tra checksum. Mặc định giữ khóa hosting đã có; --sync-key mới thay bằng tệp local. Không thay database/thanh toán.
@@ -90,9 +90,9 @@ prepare-alwaysdata.php cũng đóng gói helper mới; chỉ kèm cấu hình Ge
 ## Kiểm tra
 
 ```powershell
-php backend/tests/meal_advisor_test.php
-php backend/tests/meal_advisor_fast_test.php
-php backend/tools/check-meal-advisor.php --repo-ca
+php backenddd/tests/meal_advisor_test.php
+php backenddd/tests/meal_advisor_fast_test.php
+php backenddd/tools/check-meal-advisor.php --repo-ca
 .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest --offline --no-daemon
 ```
 

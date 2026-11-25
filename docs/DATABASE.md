@@ -6,8 +6,8 @@
 - Engine local kiểm tra ngày 12/11/2026: **10.4.32-MariaDB**, tổng cộng **32 bảng**.
 - Từ **14/11/2026**, API dùng **TiDB Cloud 8.0.11-TiDB-v8.5.3-serverless / food_delivery_app**, 32 bảng. Đã bổ sung phần local phát sinh sau lần import; đối chiếu khóa/dấu băm dữ liệu toàn bộ 32 bảng trước chuyển API. Tại thời điểm chuyển: users=5, stores=1, dishes=4, orders=6. Giữ nguyên ID và Firebase UID, không xóa DB local.
 - Bản import TiDB `food_delivery` có dữ liệu nhưng mất AUTO_INCREMENT ở 27 bảng. Vì [TiDB không hỗ trợ thêm lại thuộc tính này bằng ALTER](https://docs.pingcap.com/tidb/stable/auto-increment/), đã tạo `food_delivery_app` bằng SHOW CREATE TABLE từ MariaDB, chép dữ liệu TiDB hiện tại giữ nguyên khóa và xác minh tất cả bảng. Cả hai bản cũ vẫn còn. Công cụ check-database phát hiện các cột primary `id` thiếu tự tăng để tránh coi chỉ đủ 32 bảng là đã sẵn sàng.
-- DDL chuẩn của repo: [`backend/database/schema.sql`](../backend/database/schema.sql).
-- Migration hiện có: [`2026_11_12_shipper_profile.sql`](../backend/migration/2026_11_12_shipper_profile.sql), thêm `users.address_line` cho DB cũ. Schema mới đã có cột này; không chạy ALTER lặp lại khi cột đã tồn tại.
+- DDL chuẩn của repo: [`backenddd/database/schema.sql`](../backenddd/database/schema.sql).
+- Migration hiện có: [`2026_11_12_shipper_profile.sql`](../backenddd/migration/2026_11_12_shipper_profile.sql), thêm `users.address_line` cho DB cũ. Schema mới đã có cột này; không chạy ALTER lặp lại khi cột đã tồn tại.
 - Dòng chú thích “MySQL 8” đầu file DDL không có nghĩa máy local đang chạy MySQL 8.
 - Schema có `CREATE TABLE IF NOT EXISTS`; import lại không tự nâng cấp các cột của bảng đã tồn tại và không phải lệnh reset dữ liệu.
 

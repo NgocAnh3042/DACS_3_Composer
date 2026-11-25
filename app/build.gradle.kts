@@ -16,7 +16,7 @@ val backendLocalProperties = Properties().apply {
 }
 val localApiBaseUrl = backendLocalProperties.getProperty(
     "apiBaseUrl",
-    "https://replace-with-your-ngrok-domain.ngrok-free.app/food-delivery-api/api/"
+    "https://replace-with-your-ngrok-domain.ngrok-free.app/api/"
 ).trim().let { if (it.endsWith("/")) it else "$it/" }
 
 android {
