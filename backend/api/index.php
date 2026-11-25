@@ -198,6 +198,10 @@ if($resource==='ai' && $id==='meal-advisor' && $method==='POST' && count($parts)
     foodhubDb($pdo);
     require $base.'/ai/meal-advisor-route.php';
 }
+if($resource==='ai' && $id==='order-drafts') {
+    foodhubDb($pdo);
+    require $base.'/ai/ai-order-draft-route.php';
+}
 if($resource==='ai' && in_array($id,['preferences','feedback','metrics'],true)) {
     foodhubDb($pdo);
     require $base.'/ai/ai-personalization-route.php';

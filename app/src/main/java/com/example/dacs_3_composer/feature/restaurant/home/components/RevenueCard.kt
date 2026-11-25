@@ -18,6 +18,23 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun RevenueCard(
     revenue: String,
+    modifier: Modifier = Modifier
+) {
+    RevenueCardContent(revenue = revenue, modifier = modifier, onClick = null)
+}
+
+@Composable
+fun InteractiveRevenueCard(
+    revenue: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    RevenueCardContent(revenue = revenue, modifier = modifier, onClick = onClick)
+}
+
+@Composable
+private fun RevenueCardContent(
+    revenue: String,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {

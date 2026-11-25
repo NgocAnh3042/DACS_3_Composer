@@ -1,6 +1,58 @@
 # Bàn giao phiên làm việc — FoodHub
 
-Cập nhật **24/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+Cập nhật **25/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+
+## Sửa lỗi Crash `NoSuchMethodError: RevenueCard(...)` khi chuyển sang Tài khoản Restaurant — 25/11/2026
+
+- **Nguyên nhân thực tế từ Crash Logcat (`11:11:34.913`)**:
+  - `java.lang.NoSuchMethodError: No static method RevenueCard(Ljava/lang/String;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V in class ...RevenueCardKt (...base.apk!classes15.dex)` tại `RestaurantScreen.kt:41`.
+  - Do `versionCode` trong `app/build.gradle.kts` vẫn giữ `1`, trình triển khai nhanh của Android Studio trên thiết bị Samsung (`SM-A235F`, Android 12) giữ nguyên thư mục cài đặt cũ `/data/app/~~GVpCUFoqFY6Gia8pBfNuLw==/base.apk` và chỉ đẩy một phần `.overlay` DEX (`RestaurantScreenKt` được cập nhật chữ ký mới có `onClick`, trong khi `classes15.dex` vẫn giữ `RevenueCard` chữ ký cũ).
+- **Khắc phục triệt để**:
+  - `app/build.gradle.kts`: Tăng `versionCode = 2` (`versionName = "1.1"`) để ép Android `PackageManager` xóa sạch bộ đệm `code_cache/.overlay/` cũ và cài mới hoàn toàn toàn bộ `.dex` ngay khi nhấn **Run ▶**.
+  - `RevenueCard.kt`, `WeeklyRevenueCard.kt`, `CategoryTabs.kt`, `RestaurantScreen.kt`, `RestaurantMenuScreen.kt`: Giữ nguyên các hàm chữ ký gốc (`RevenueCard`, `WeeklyRevenueCard`, `CategoryTabs`) tương thích nhị phân 100%, tách các hàm mở rộng thành `InteractiveRevenueCard`, `InteractiveWeeklyRevenueCard`, `DynamicCategoryTabs`, đồng thời lọc trùng khóa không phân biệt hoa/thường cho `LazyRow` danh mục thực đơn.
+  - Đã chạy `.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL**.
+
+## Nâng cấp AI Ordering Agent v2 (Đặt lại đơn cũ 1 chạm • Upsell Mở Voucher • Hẹn giờ giao) & Đồng bộ Live Alwaysdata/TiDB — 25/11/2026
+
+- **Khắc phục triệt để lỗi chưa đặt được món qua AI trên điện thoại**:
+  - Nguyên nhân: Bản APK mới trên máy gửi `"Chọn đặt 1x Mâm khai vị"` lên `https://chinh.alwaysdata.net/food-delivery-api/api/ai/meal-advisor`, nhưng trước đó Alwaysdata chưa được đồng bộ bộ mã Ordering Agent & bảng nháp trên TiDB Cloud.
+  - Đã chạy migration cộng thêm `backend/database/migrations/20261125_ai_order_drafts.sql` trên TiDB Cloud (`food_delivery_app`), bổ sung `INSERT IGNORE` 3 voucher sàn (`FHGIAM15K`, `FHDEAL30K`, `FHFREESHIP` — tổng 8 voucher active), và đồng bộ toàn bộ 20 tệp PHP lên Alwaysdata (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261125-033019`).
+  - Bổ sung nhận diện cả văn bản thuần `"Chọn đặt 1x ..."` lẫn `orderingAction` trong `AiOrderingOrchestrator.php`. Kiểm tra smoke live trên Alwaysdata với câu `"Chọn đặt 1x Mâm khai vị"` trả về `kind = ordering_quote`, tự tối ưu mã `FHDEAL30K (-30.000đ)` và dọn sạch bản nháp thử nghiệm ngay sau khi kiểm tra (`0` đơn hàng giả tạo trên production).
+- **Bổ sung 3 chức năng nâng cao cho AI Ordering Agent (End-to-End Backend + DB + Android Compose)**:
+  1. **Đặt lại đơn cũ 1 chạm (`One-Tap Reorder`)**:
+     - `AiOrderDraftService::reorderPastOrder()` & `AiOrderingOrchestrator` (`reorder_last` + câu tự nhiên *"Đặt lại y hệt đơn hôm qua"*, *"Đặt lại đơn cũ"*): nạp món + tùy chọn từ đơn hoàn tất gần nhất (`reordered_from_order_id`), kiểm tra trạng thái mở cửa quán, tự lược món hết hàng và **đối chiếu giá niêm yết hiện hành** so với giá lịch sử (báo rõ chênh lệch `giá cũ → giá mới`).
+     - Giao diện Android: Chip 1 chạm **`Đặt lại đơn cũ`** ngay đầu màn hình `MealAdvisorScreen.kt` + nhãn `Đặt lại đơn cũ · Giá hiện hành` trên `CheckoutSummaryCard`.
+  2. **Gợi ý món kèm có sự đồng ý (`Consent-Based Smart Voucher Upselling`)**:
+     - `AiOrderDraftService::findSmartUpsell()` & `acceptUpsell()`: khi tổng món đang thiếu `1.000đ–25.000đ` (đặc biệt `5.000đ–10.000đ`) để chạm `min_order_amount` của voucher giảm sâu cùng quán/toàn sàn, tự động tìm món phụ/nước giải khát cùng quán không vướng tùy chọn bắt buộc sao cho tổng thanh toán sau giảm **rẻ hơn cả khi chưa thêm** (`isStrictlyCheaper = true`). Tuyệt đối **không tự thêm vào giỏ** khi chưa có sự đồng ý; hiển thị thẻ `ai_upsell_suggestion_card` kèm nút 1 chạm **`+ Thêm <Món> & Áp mã <CODE>`** (hoặc nhắn *"Ừ thêm món kèm đó đi"*).
+  3. **Hẹn giờ giao hàng trước (`Scheduled Delivery — scheduled_for`)**:
+     - Thêm cột `scheduled_for DATETIME NULL` vào `ai_order_drafts` và `ai_order_quotes`; kiểm tra chặt chẽ giờ mở cửa thực tế của nhà hàng (`stores.open_time` .. `stores.close_time`) và thời gian chuẩn bị tối thiểu (`>= 20 phút`, `<= 48 giờ`).
+     - Hỗ trợ cả ngôn ngữ tự nhiên (*"giao lúc 18h30 tối nay"*, *"hẹn giao 8h30 sáng mai"*, *"đổi lại giao ngay"*) lẫn dải `FilterChip` chọn khung giờ hợp lệ ngay trên `CheckoutSummaryCard`; khi xác nhận tạo đơn, lưu `[Hẹn giao: HH:MM DD/MM/YYYY]` vào `orders.customer_note` và `order_status_logs.note` để Nhà hàng & Shipper thấy ngay.
+- **Kiểm thử đã xác nhận**:
+  - `backend/tests/foodhub_ordering_agent_150_test.php`: mở rộng lên **175/175 PASS (100%)** (thêm Group H 25 kịch bản cho Reorder, Smart Upsell, Scheduled Delivery & `"Chọn đặt 1x ..."`).
+  - Android Gradle `.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL** (cần nhấn **Run ▶** cài lại bản `app-debug.apk` mới lên điện thoại để hiển thị 3 cụm UI mới trên app; phần đặt món AI phía server Alwaysdata đã hoạt động ngay).
+
+## Nâng cấp FoodHub AI thành AI Food Ordering Agent (Đặt món qua Hội thoại) — 25/11/2026
+
+- **Database Migration cộng thêm** (`backend/database/migrations/20261125_ai_order_drafts.sql`):
+  - Khai báo 3 bảng `ai_order_drafts`, `ai_order_quotes`, `ai_order_idempotency` (chưa tự ý chạy trên TiDB Cloud production theo đúng quy tắc không sửa DB production khi chưa được phép).
+- **Backend Ordering Engine & REST Endpoints**:
+  - Tạo mới `backend/ai/AiOrderDraftService.php`: State machine đặt món đầy đủ (`IDLE` → `AWAITING_FINAL_CONFIRMATION` → `ORDER_CREATED` / `PAYMENT_PENDING` + nhánh ngoại lệ), kiểm tra quyền `customer`, ràng buộc 1 nhà hàng/đơn, kiểm chứng tùy chọn món (`option_groups`/`options`), tối ưu voucher theo mức giảm VND thực tế, tính phí ship theo km + ETA có cơ sở, sinh báo giá VND nguyên kèm `confirmationToken` (`TTL = 10 phút`) và tạo đơn an toàn trong giao dịch SQL chống trùng đơn (`idempotencyKey` + `SELECT ... FOR UPDATE`).
+  - Tạo mới `backend/ai/AiOrderingOrchestrator.php` & `backend/ai/ai-order-draft-route.php`; mở rộng `FoodHubSystemPrompt.php` (`v3.0.0`), `meal-advisor-route.php` và `backend/api/index.php` (`/api/ai/order-drafts`).
+- **Android Jetpack Compose AI Ordering UI**:
+  - Mở rộng `MealAdvisorRepository.kt`, `MealAdvisorViewModel.kt`, `MealAdvisorScreen.kt`, `MainRouteContainerUser.kt`, `FirebaseAuthInterceptor.kt`: nút **Chọn đặt** trên thẻ món, xử lý xung đột khác cửa hàng (`StoreConflictCard`), bảng **Tóm tắt đơn đặt món (`CheckoutSummaryCard`)** chỉnh số lượng/địa chỉ/voucher tối ưu/COD-PayOS, nút **`Xác nhận đặt hàng — Xđ`** kèm khóa `idempotencyKey` cố định mỗi báo giá, và thẻ hoàn tất **`OrderCreatedSuccessCard`** điều hướng thẳng sang Theo dõi đơn / Thanh toán QR PayOS.
+- **Kiểm thử đã xác nhận**:
+  - `backend/tests/foodhub_ordering_agent_150_test.php`: **150/150 PASS (100%)** trên đủ 7 nhóm A–G.
+  - `backend/tests/foodhub_ordering_http_integration_test.php`: **8/8 PASS (100%)** qua máy chủ HTTP PHP local.
+  - Toàn bộ bộ test hồi quy PHP (`foodhub_conversation_120_test.php` 120/120, `foodhub_phase5_quality_120_test.php` 120/120, `foodhub_meal_quality_test.php` 82/82, `foodhub_vietnamese_context_test.php` 85/85, `recommendation_system_test.php` 31/31): **100% PASS**.
+  - Android Gradle `:app:compileDebugKotlin`, `:app:compileDebugAndroidTestKotlin`, `:app:testDebugUnitTest` (gồm `OrderingAgentViewModelTest`, `MealAdvisorScreenTest`, `HomeFeedCompositionTest`, `DeliveryEstimateTest`): **BUILD SUCCESSFUL**.
+  - **Chưa đồng bộ lên Alwaysdata / TiDB production**: Cần sự cho phép của người dùng trước khi chạy migration `20261125_ai_order_drafts.sql` và đồng bộ tệp PHP lên Alwaysdata.
+
+## Sửa lỗi Crash `NoSuchMethodError: cacheTtlMs$default` khi mở Ứng dụng — 25/11/2026
+
+- **Nguyên nhân**: Các hàm `suspend inline fun <reified T> list/get/create/update` trong `FoodHubApi.kt` trước đó gọi trực tiếp các hàm `@PublishedApi internal` (`cacheTtlMs` có tham số mặc định `filters = emptyMap()`), khiến trình biên dịch nhúng lời gọi cầu nối tĩnh `FoodHubClient.cacheTtlMs$default(...)` vào từng ViewModel và gây lỗi `NoSuchMethodError` khi cài đặt tăng dần / Apply Changes trên thiết bị thật (`SM-A235F`).
+- **Khắc phục**:
+  - `app/src/main/java/com/example/dacs_3_composer/data/remote/FoodHubApi.kt`: Loại bỏ hoàn toàn `@PublishedApi internal` và chuyển toàn bộ logic bộ nhớ đệm + mạng vào các phương thức chuẩn không `inline` (`listTyped`, `getTyped`, `createObject`, `updateObject`); giữ `inline fun <reified T>` làm lớp bọc mỏng 1 dòng truyền `T::class.java`, tương thích nhị phân 100% với mọi bản build tăng dần.
+  - Chạy `.\gradlew.bat clean :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL** (45/45 tasks), sinh bản `app-debug.apk` mới hoàn toàn không còn `.dex` cũ.
 
 ## Phát triển Danh mục Món ăn Động & Phân loại Trực tiếp trên Trang chủ Khách hàng — 24/11/2026
 

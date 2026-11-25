@@ -7,6 +7,8 @@ require_once __DIR__.'/ConversationContext.php';
 require_once __DIR__.'/UserPersonalization.php';
 require_once __DIR__.'/AiQualityMonitor.php';
 require_once __DIR__.'/FoodHubKnowledgeBase.php';
+require_once __DIR__.'/AiOrderDraftService.php';
+require_once __DIR__.'/AiOrderingOrchestrator.php';
 
 final class MealAdvisorException extends RuntimeException {
     public function __construct(public int $status, string $message, public string $reason='') { parent::__construct($message); }

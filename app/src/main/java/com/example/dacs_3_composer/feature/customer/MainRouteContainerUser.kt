@@ -163,7 +163,20 @@ fun MainRouteContainerUser(
                                 navController.navigate("dish_detail/$dishId")
                             }
                         },
-                        onSelectDish = { dish -> selectedAiDish = dish }
+                        onSelectDish = { dish -> selectedAiDish = dish },
+                        onTrackOrder = { orderId ->
+                            if (orderId.isNotBlank()) {
+                                navController.navigate("order_tracking/$orderId")
+                            }
+                        },
+                        onPayOrder = { orderId, amount ->
+                            if (orderId.isNotBlank()) {
+                                navController.navigate("payment/$orderId/$amount")
+                            }
+                        },
+                        onManageAddresses = {
+                            navController.navigate("manage_address")
+                        }
                     )
                 }
                 

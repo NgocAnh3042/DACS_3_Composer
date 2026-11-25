@@ -36,6 +36,19 @@ import java.time.LocalDate
 @Composable
 fun WeeklyRevenueCard(
     chartWeights: List<Float>,
+    modifier: Modifier = Modifier
+) {
+    InteractiveWeeklyRevenueCard(
+        chartWeights = chartWeights,
+        orders = emptyList(),
+        onDetailClick = {},
+        modifier = modifier
+    )
+}
+
+@Composable
+fun InteractiveWeeklyRevenueCard(
+    chartWeights: List<Float>,
     orders: List<Order> = emptyList(),
     onDetailClick: () -> Unit = {},
     modifier: Modifier = Modifier

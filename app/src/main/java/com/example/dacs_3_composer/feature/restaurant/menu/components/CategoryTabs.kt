@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -21,14 +22,33 @@ import androidx.compose.ui.unit.sp
 fun CategoryTabs(
     selectedCategory: String,
     onCategorySelected: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    categories: List<String> = listOf("Tất cả", "Món chính", "Khai vị")
+    modifier: Modifier = Modifier
 ) {
+    DynamicCategoryTabs(
+        selectedCategory = selectedCategory,
+        onCategorySelected = onCategorySelected,
+        categories = listOf("Tất cả", "Món chính", "Khai vị"),
+        modifier = modifier
+    )
+}
+
+@Composable
+fun DynamicCategoryTabs(
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit,
+    categories: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val safeCategories = remember(categories) {
+        categories.map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+    }
     LazyRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(categories, key = { it.lowercase() }) { category ->
+        items(safeCategories, key = { it.lowercase() }) { category ->
             val isSelected = selectedCategory.equals(category, ignoreCase = true)
             Button(
                 onClick = { onCategorySelected(category) },

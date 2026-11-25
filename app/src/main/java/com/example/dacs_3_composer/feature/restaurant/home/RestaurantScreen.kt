@@ -38,7 +38,7 @@ fun RestaurantHomeScreen(
         item { GreetingSection() }
 
         item {
-            RevenueCard(
+            InteractiveRevenueCard(
                 revenue = homeViewModel.totalRevenue,
                 onClick = onRevenueDetailClick
             )
@@ -47,7 +47,7 @@ fun RestaurantHomeScreen(
         item { StatsMiniCardRow(totalOrders = homeViewModel.totalOrdersCount) }
 
         item {
-            WeeklyRevenueCard(
+            InteractiveWeeklyRevenueCard(
                 chartWeights = homeViewModel.weeklyChartData,
                 orders = ordersList,
                 onDetailClick = onRevenueDetailClick
@@ -56,7 +56,7 @@ fun RestaurantHomeScreen(
 
         item { TopDishesSectionTitle() }
 
-        items(topDishesList) { dish ->
+        items(topDishesList, key = { it.rank }) { dish ->
             TopSellingDishItem(
                 rank = dish.rank,
                 dishName = dish.dishName,

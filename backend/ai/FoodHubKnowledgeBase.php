@@ -172,8 +172,8 @@ final class FoodHubKnowledgeBase {
                     'dat hang nhu the nao|mua tren app sao' => 4,
                     'dat truoc gio|hen gio giao' => 3,
                 ],
-                'facts' => 'Các bước đặt món: 1) Chạm vào bất kỳ thẻ món ăn nào ở Trang chủ, Tìm kiếm hoặc trong khung gợi ý của FoodHub AI để mở trực tiếp trang Chi tiết món ăn (Profile món), chọn số lượng rồi bấm Thêm vào giỏ; 2) Vào Giỏ hàng kiểm tra địa chỉ nhận, khoảng cách/phí ship, áp voucher (nếu có) và chọn Tiền mặt hoặc PayOS; 3) Bấm Đặt hàng và theo dõi tiến độ ở mục Đơn hàng. Hiện FoodHub phục vụ đơn giao ngay, chưa hỗ trợ hẹn giờ giao trước.',
-                'fallback' => 'Mình chỉ cần chạm vào thẻ món ăn (ở Trang chủ, Tìm kiếm hoặc ngay trên thẻ gợi ý của FoodHub AI) để mở trang Chi tiết món ăn, chọn số lượng rồi bấm Thêm vào giỏ; sau đó vào Giỏ hàng kiểm tra địa chỉ, chọn voucher (nếu có) và thanh toán Tiền mặt hoặc PayOS nha. Hiện ứng dụng phục vụ giao ngay chứ chưa có tính năng hẹn giờ trước ạ.',
+                'facts' => 'Các bước đặt món: 1) Chạm vào thẻ món ăn ở Trang chủ, Tìm kiếm hoặc nhắn trực tiếp cho FoodHub AI (hỗ trợ cả Đặt lại đơn cũ 1 chạm, Gợi ý món kèm mở khóa voucher giảm sâu và Hẹn giờ giao hàng trước trong giờ mở cửa của quán); 2) Kiểm tra báo giá tổng tiền, địa chỉ, phí ship theo km, voucher và chọn Tiền mặt hoặc PayOS; 3) Xác nhận đặt hàng và theo dõi tiến độ ở mục Đơn hàng.',
+                'fallback' => 'Mình có thể chạm vào thẻ món để thêm vào giỏ hoặc nhắn trực tiếp cho FoodHub AI đặt món giúp mình (hỗ trợ đặt lại đơn cũ, tự tìm mã giảm giá tốt nhất và hẹn giờ giao trước trong khung giờ quán mở cửa) nha!',
             ],
             // 4. Ghi chú món ăn (không hành, ít cay, đũa muỗng)
             [

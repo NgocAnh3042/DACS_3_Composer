@@ -3,13 +3,13 @@ package com.example.dacs_3_composer.data.remote
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.gson.JsonDeserializationContext
-import com.google.gson.JsonDeserializer
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
-import com.google.gson.JsonObject
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
@@ -25,13 +25,13 @@ import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.QueryMap
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
-import java.lang.reflect.Type
 import java.io.IOException
+import java.lang.reflect.Type
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 interface FoodHubApi {
     @GET("{resource}") suspend fun list(@Path(value = "resource", encoded = true) resource: String, @QueryMap filters: Map<String, String> = emptyMap()): Response<JsonObject>
@@ -45,11 +45,9 @@ object FoodHubClient {
     // Hosted API: device requests no longer depend on the development computer.
     const val BASE_URL = "https://chinh.alwaysdata.net/food-delivery-api/api/"
 
-    @PublishedApi
-    internal data class CacheEntry(val json: JsonElement, val expiresAtMs: Long)
+    private data class CacheEntry(val json: JsonElement, val expiresAtMs: Long)
 
-    @PublishedApi
-    internal val responseCache = ConcurrentHashMap<String, CacheEntry>()
+    private val responseCache = ConcurrentHashMap<String, CacheEntry>()
 
     @Volatile private var cachedTokenUid: String? = null
     @Volatile private var cachedIdToken: String? = null
@@ -91,8 +89,7 @@ object FoodHubClient {
         }
     }
 
-    @PublishedApi
-    internal fun cacheTtlMs(resource: String, filters: Map<String, String> = emptyMap()): Long {
+    private fun computeCacheTtlMs(resource: String, filters: Map<String, String>): Long {
         if (filters["includeUnavailable"] == "1") return 0L
         return when (resource) {
             "stores", "dishes", "categories", "promotions", "vouchers", "addresses" -> 60_000L
@@ -101,8 +98,7 @@ object FoodHubClient {
         }
     }
 
-    @PublishedApi
-    internal fun invalidateForMutation(resource: String) {
+    private fun invalidateCacheForResource(resource: String) {
         when (resource) {
             "dishes" -> responseCache.keys.removeIf { it.startsWith("dishes:") || it.startsWith("categories:") }
             "stores" -> responseCache.keys.removeIf { it.startsWith("stores:") || it.startsWith("dishes:") || it.startsWith("categories:") }
@@ -125,6 +121,7 @@ object FoodHubClient {
                 return Timestamp(date)
             }
         }).create()
+
     val api: FoodHubApi by lazy {
         val authInterceptor = FirebaseAuthInterceptor(::resolveFastIdToken)
         val client = OkHttpClient.Builder()
@@ -139,14 +136,14 @@ object FoodHubClient {
             .create(FoodHubApi::class.java)
     }
 
-    suspend inline fun <reified T> list(resource: String, filters: Map<String, String> = emptyMap()): List<T> {
+    suspend fun <T> listTyped(resource: String, itemClass: Class<T>, filters: Map<String, String>): List<T> {
         val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-        val ttl = cacheTtlMs(resource, filters)
+        val ttl = computeCacheTtlMs(resource, filters)
         val cacheKey = if (ttl > 0L) "$resource:list:$uid:${filters.entries.sortedBy { it.key }.joinToString("&") { "${it.key}=${it.value}" }}" else ""
         if (ttl > 0L) {
             val hit = responseCache[cacheKey]
             if (hit != null && System.currentTimeMillis() < hit.expiresAtMs && hit.json.isJsonArray) {
-                return hit.json.asJsonArray.map { gson.fromJson(it, T::class.java) }
+                return hit.json.asJsonArray.map { gson.fromJson(it, itemClass) }
             }
         }
         val response = api.list(resource, filters)
@@ -155,17 +152,17 @@ object FoodHubClient {
         if (ttl > 0L) {
             responseCache[cacheKey] = CacheEntry(array, System.currentTimeMillis() + ttl)
         }
-        return array.map { gson.fromJson(it, T::class.java) }
+        return array.map { gson.fromJson(it, itemClass) }
     }
 
-    suspend inline fun <reified T> get(resource: String, id: String): T {
+    suspend fun <T> getTyped(resource: String, id: String, itemClass: Class<T>): T {
         val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-        val ttl = cacheTtlMs(resource)
+        val ttl = computeCacheTtlMs(resource, emptyMap())
         val cacheKey = if (ttl > 0L) "$resource:get:$uid:$id" else ""
         if (ttl > 0L) {
             val hit = responseCache[cacheKey]
             if (hit != null && System.currentTimeMillis() < hit.expiresAtMs) {
-                return gson.fromJson(hit.json, T::class.java)
+                return gson.fromJson(hit.json, itemClass)
             }
         }
         val response = api.get(resource, id)
@@ -174,25 +171,37 @@ object FoodHubClient {
         if (ttl > 0L) {
             responseCache[cacheKey] = CacheEntry(value, System.currentTimeMillis() + ttl)
         }
-        return gson.fromJson(value, T::class.java)
+        return gson.fromJson(value, itemClass)
     }
 
-    suspend inline fun <reified T> create(resource: String, value: T): String {
+    suspend fun createObject(resource: String, value: Any?): String {
         val response = api.create(resource, gson.toJsonTree(value).asJsonObject)
         if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
-        invalidateForMutation(resource)
+        invalidateCacheForResource(resource)
         return response.body()?.get("id")?.asString ?: ""
     }
 
-    suspend inline fun <reified T> update(resource: String, id: String, value: T) {
+    suspend fun updateObject(resource: String, id: String, value: Any?) {
         val response = api.update(resource, id, gson.toJsonTree(value).asJsonObject)
         if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
-        invalidateForMutation(resource)
+        invalidateCacheForResource(resource)
     }
+
+    suspend inline fun <reified T> list(resource: String, filters: Map<String, String> = emptyMap()): List<T> =
+        listTyped(resource, T::class.java, filters)
+
+    suspend inline fun <reified T> get(resource: String, id: String): T =
+        getTyped(resource, id, T::class.java)
+
+    suspend inline fun <reified T> create(resource: String, value: T): String =
+        createObject(resource, value)
+
+    suspend inline fun <reified T> update(resource: String, id: String, value: T) =
+        updateObject(resource, id, value)
 
     suspend fun delete(resource: String, id: String) {
         val response = api.delete(resource, id)
         if (!response.isSuccessful) error(response.errorBody()?.string() ?: "API lỗi ${response.code()}")
-        invalidateForMutation(resource)
+        invalidateCacheForResource(resource)
     }
 }

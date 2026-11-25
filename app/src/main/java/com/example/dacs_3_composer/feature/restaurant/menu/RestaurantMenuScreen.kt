@@ -68,7 +68,7 @@ fun RestaurantMenuScreen(
 
     val storeCategories = remember(dishes) {
         dishes.map { it.category.trim() }
-            .filter { it.isNotBlank() }
+            .filter { it.isNotBlank() && !it.equals("Tất cả", ignoreCase = true) }
             .distinctBy { it.lowercase() }
     }
 
@@ -102,7 +102,7 @@ fun RestaurantMenuScreen(
             item { ScreenTitle(title = "Quản lý thực đơn", modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) }
             item { SearchBar(query = searchQuery, onQueryChange = { searchQuery = it }, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) }
             item {
-                CategoryTabs(
+                DynamicCategoryTabs(
                     selectedCategory = selectedCategoryTab,
                     onCategorySelected = { selectedCategoryTab = it },
                     categories = categoryTabs,

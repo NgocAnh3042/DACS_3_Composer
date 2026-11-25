@@ -9,6 +9,10 @@ try{
     if($me['status']!=='active'||!in_array($me['role'],['customer','admin','seller','driver'],true))
         throw new MealAdvisorException(403,'Tài khoản chưa được phép dùng tư vấn món.');
     $request=body();
+    $orderingAction=is_array($request['orderingAction']??null)?$request['orderingAction']:null;
+    if($orderingAction!==null && (!is_string($request['message']??null) || trim((string)$request['message'])==='')){
+        $request['message']='Cập nhật đơn đặt món';
+    }
     $input=MealAdvisor::validate($request);
     $accountKey=hash('sha256',$uid);
     $prefsFile=foodhubCacheFile('ai-prefs-'.$accountKey.'.json');
@@ -80,6 +84,25 @@ try{
         out($status,$body);
     };
     $fee=max(0,(float)($config['delivery_fee']??15000));
+
+    // Conversational Food Ordering Agent (Draft + Voucher Optimization + ETA + Secure Quote Confirmation)
+    $activeOrderDraft=null;
+    if ($me['role']==='customer') {
+        $convKey=$chatId??('conv-'.$me['id']);
+        $activeOrderDraft=AiOrderDraftService::getActiveDraft($pdo,(int)$me['id'],(string)$convKey);
+        $input['conversationId']=(string)$convKey;
+        if (AiOrderingOrchestrator::shouldHandle($me,$input,$activeOrderDraft,$orderingAction)) {
+            $ordResult=AiOrderingOrchestrator::handle($pdo,$config,$me,$input,$orderingAction);
+            $respond(200,['data'=>array_merge([
+                'preferences'=>'',
+                'budget'=>$input['budget'],
+                'budgetScope'=>$input['budgetScope'],
+                'catalogLimited'=>false,
+                'hasMore'=>false,
+            ],$ordResult)]);
+        }
+    }
+
     $personal=$me['role']==='customer' && preg_match('/\b(goi y|tu van|chon)\b.*\b(lich su|tung dat|hay dat)\b/',MealAdvisor::folded($input['message']));
     $supportHumanized=false;
     $support=$personal?null:FoodHubSupport::reply($pdo,$me,$input,$fee,static function(string $question,string $previous) use ($base,$uid): string {
