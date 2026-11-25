@@ -1,10 +1,12 @@
 package com.example.dacs_3_composer.feature.customer.home.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -20,7 +22,12 @@ import java.util.Locale
 
 //          Vẽ giao diện có colum bao quanh có ảnh tên..vv
 @Composable
-fun DeliciousDishItem(dish: Dish, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun DeliciousDishItem(
+    dish: Dish,
+    modifier: Modifier = Modifier,
+    isRecommended: Boolean = false,
+    onClick: () -> Unit
+) {
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -30,17 +37,32 @@ fun DeliciousDishItem(dish: Dish, modifier: Modifier = Modifier, onClick: () -> 
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = dish.imageUrl.ifBlank { R.drawable.food_pho_v2 },
-                contentDescription = dish.name,
-                placeholder = painterResource(id = R.drawable.food_pho_v2),
-                error = painterResource(id = R.drawable.food_pho_v2),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.4f)
-                    .clip(RoundedCornerShape(16.dp)),
-                contentScale = ContentScale.Crop
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AsyncImage(
+                    model = dish.imageUrl.ifBlank { R.drawable.food_pho_v2 },
+                    contentDescription = dish.name,
+                    placeholder = painterResource(id = R.drawable.food_pho_v2),
+                    error = painterResource(id = R.drawable.food_pho_v2),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.4f)
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                if (isRecommended) {
+                    Text(
+                        text = "Gợi ý",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .background(Color(0xD92159BC), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
             Text(

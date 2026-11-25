@@ -19,11 +19,25 @@ check(FoodHubSupport::detectEmotion('Cho mình xem thực đơn') === 'neutral',
 echo "PASS: Emotion detection heuristics\n";
 
 // 2. Test Groq humanizeSupport mock
+// New format: multi-turn messages array. Facts are in the last system message content.
 $mockGroqResponses = [];
 $advisor = new MealAdvisor(['model' => MealAdvisor::GROQ_MODEL, 'api_key' => 'gsk_mock_key'], function(array $payload) use (&$mockGroqResponses) {
-    $msg = $payload['messages'][1]['content'];
-    $data = json_decode($msg, true);
-    $intent = $data['verifiedFacts']['intent'] ?? '';
+    // Find intent from the last system message which contains verified facts JSON
+    $intent = '';
+    foreach (array_reverse($payload['messages']) as $m) {
+        if ($m['role'] === 'system' && str_contains($m['content'], 'DỮ LIỆU ĐÃ XÁC THỰC')) {
+            // Extract JSON after the header line
+            $lines = explode("\n", $m['content']);
+            foreach ($lines as $line) {
+                $decoded = json_decode(trim($line), true);
+                if (is_array($decoded) && isset($decoded['intent'])) {
+                    $intent = $decoded['intent'];
+                    break;
+                }
+            }
+            break;
+        }
+    }
 
     if (isset($mockGroqResponses[$intent])) {
         return $mockGroqResponses[$intent];

@@ -1,52 +1,98 @@
 package com.example.dacs_3_composer.feature.customer.home
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.dacs_3_composer.feature.customer.cart.CartViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.*
 import com.example.dacs_3_composer.feature.customer.search.components.SectionTitle
+import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
+import com.example.dacs_3_composer.feature.shared.location.rememberUserCoordinates
 
 @Composable
 fun HomeScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
     onNavigateToSearch: (String) -> Unit,
-    onNavigateToChat: () -> Unit, // 🎯 THÊM: Điều hướng tới MessageCenter
+    onNavigateToChat: () -> Unit,
     homeViewModel: HomeViewModel = viewModel(),
     cartViewModel: CartViewModel = viewModel()
 ) {
     val dishes by homeViewModel.deliciousDishes.collectAsState()
     val restaurants by homeViewModel.restaurantsList.collectAsState()
     val isLoading by homeViewModel.isLoading.collectAsState()
+    val personalizedIds by homeViewModel.personalizedDishIds.collectAsState()
+    val isPersonalizedFeed by homeViewModel.isPersonalizedFeed.collectAsState()
+    val categories by homeViewModel.categories.collectAsState()
+    val selectedCategory by homeViewModel.selectedCategory.collectAsState()
+    val userCoords = rememberUserCoordinates(requestPermissionIfNeeded = true)
+
+    var showAllCategoriesSheet by remember { mutableStateOf(false) }
+
+    val enrichedRestaurants = remember(restaurants, userCoords) {
+        restaurants
+            .map { DeliveryEstimate.enrichRestaurant(it, userCoords?.first, userCoords?.second) }
+            .sortedBy { it.distanceKm ?: Double.MAX_VALUE }
+    }
+
+    val displayedDishes = remember(dishes, selectedCategory) {
+        HomeViewModel.filterDishesByCategory(dishes, selectedCategory)
+    }
+
+    val displayedRestaurants = remember(enrichedRestaurants, dishes, selectedCategory) {
+        HomeViewModel.filterRestaurantsByCategory(enrichedRestaurants, dishes, selectedCategory)
+    }
 
     LaunchedEffect(Unit) {
         homeViewModel.loadHome()
         cartViewModel.fetchPromotionsFromFirebase()
+    }
+
+    if (showAllCategoriesSheet) {
+        AllCategoriesBottomSheet(
+            categories = categories,
+            totalDishCount = dishes.size,
+            selectedCategory = selectedCategory,
+            onSelectCategory = { cat -> homeViewModel.setCategoryFilter(cat) },
+            onOpenFullMenu = {
+                showAllCategoriesSheet = false
+                navController.navigate("all_dishes") { launchSingleTop = true }
+            },
+            onDismiss = { showAllCategoriesSheet = false }
+        )
     }
 
     LazyColumn(
@@ -62,7 +108,7 @@ fun HomeScreen(
                 onSearchAction = { query ->
                     onNavigateToSearch(query)
                 },
-                onChatClick = onNavigateToChat // 🎯 TRUYỀN: Sự kiện từ Header lên
+                onChatClick = onNavigateToChat
             )
         }
 
@@ -87,30 +133,126 @@ fun HomeScreen(
                 }
             }
         }
-        item { CategorySectionn() }
+        item {
+            CategorySection(
+                categories = categories,
+                totalDishCount = dishes.size,
+                selectedCategory = selectedCategory,
+                isLoading = homeViewModel.dishesLoading && categories.isEmpty(),
+                onCategoryClick = { categoryName ->
+                    homeViewModel.toggleCategory(categoryName)
+                },
+                onSeeAllClick = {
+                    showAllCategoriesSheet = true
+                }
+            )
+        }
 
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Món ngon cho bạn", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                TextButton(onClick = { navController.navigate("all_dishes") { launchSingleTop = true } }) { Text("Tất cả") }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = selectedCategory?.let { "Danh mục: $it" } ?: "Món ngon cho bạn",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (selectedCategory != null) {
+                        Text(
+                            text = "Có ${displayedDishes.size} món ăn thuộc nhóm $selectedCategory",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF2159BC)
+                        )
+                    } else if (isPersonalizedFeed) {
+                        Text(
+                            text = "Ưu tiên món liên quan đến tìm kiếm gần đây của bạn",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF727785)
+                        )
+                    }
+                }
+                if (selectedCategory != null) {
+                    AssistChip(
+                        onClick = { homeViewModel.setCategoryFilter(null) },
+                        label = { Text("Bỏ lọc", style = MaterialTheme.typography.labelMedium) },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Bỏ lọc danh mục",
+                                modifier = Modifier.size(15.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = Color(0xFFEAF2FA),
+                            labelColor = Color(0xFF2159BC),
+                            trailingIconContentColor = Color(0xFF2159BC)
+                        ),
+                        border = null
+                    )
+                } else {
+                    IconButton(
+                        onClick = { homeViewModel.refreshDeliciousDishes() },
+                        enabled = !homeViewModel.dishesLoading
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Làm mới gợi ý món",
+                            tint = Color(0xFF2159BC)
+                        )
+                    }
+                }
+                TextButton(onClick = { navController.navigate("all_dishes") { launchSingleTop = true } }) {
+                    Text("Tất cả", color = Color(0xFF2159BC))
+                }
             }
         }
-        items(dishes.take(20).chunked(2), key = { "dishes-" + it.first().id }) { pair ->
+
+        if (homeViewModel.dishesLoading && dishes.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color(0xFF2159BC))
+                }
+            }
+        } else if (displayedDishes.isEmpty() && selectedCategory != null) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Hiện chưa có món nào thuộc danh mục \"$selectedCategory\".", color = Color(0xFF6B7280))
+                        OutlinedButton(onClick = { homeViewModel.setCategoryFilter(null) }) {
+                            Text("Xem tất cả món ăn", color = Color(0xFF2159BC))
+                        }
+                    }
+                }
+            }
+        }
+
+        val maxHomeDishes = if (selectedCategory != null) 40 else 20
+        items(displayedDishes.take(maxHomeDishes).chunked(2), key = { "dishes-" + (selectedCategory ?: "all") + "-" + it.first().id }) { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { dish ->
-                    DeliciousDishItem(dish, Modifier.weight(1f)) {
-                        cartViewModel.currentRestaurantId = dish.restaurantId
-                        cartViewModel.currentRestaurantName = restaurants.find { it.id == dish.restaurantId }?.name.orEmpty()
-                        navController.navigate("restaurant_detail/${dish.restaurantId}")
+                    DeliciousDishItem(
+                        dish = dish,
+                        modifier = Modifier.weight(1f),
+                        isRecommended = dish.id in personalizedIds
+                    ) {
+                        navController.navigate("dish_detail/${dish.id}")
                     }
                 }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+
         item {
             SectionTitle(
-                title = "Quán ngon gợi ý",
-                onSeeAllClick = { /* xử lý nếu cần */ }
+                title = selectedCategory?.let { "Quán có món $it (${displayedRestaurants.size})" } ?: "Quán ngon gợi ý",
+                onSeeAllClick = { navController.navigate("all_dishes") { launchSingleTop = true } }
             )
         }
 
@@ -121,7 +263,7 @@ fun HomeScreen(
                 }
             }
         }
-        items(restaurants) { restaurant ->
+        items(displayedRestaurants, key = { it.id }) { restaurant ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

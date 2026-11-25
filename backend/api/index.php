@@ -6,6 +6,9 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Authorization, Content-Type');
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+if (extension_loaded('zlib') && !ini_get('zlib.output_compression') && stripos((string)($_SERVER['HTTP_ACCEPT_ENCODING'] ?? ''), 'gzip') !== false) {
+    @ob_start('ob_gzhandler');
+}
 
 function out(int $status, array $body): never {
     http_response_code($status);
@@ -31,6 +34,29 @@ function bearer(): string {
 function b64url(string $value): string {
     $raw=base64_decode(strtr($value,'-_','+/').str_repeat('=',(4-strlen($value)%4)%4),true);
     return $raw===false ? '' : $raw;
+}
+function foodhubDistanceKm(?float $lat1,?float $lng1,?float $lat2,?float $lng2): ?float {
+    if($lat1===null||$lng1===null||$lat2===null||$lng2===null)return null;
+    if(!is_finite($lat1)||!is_finite($lng1)||!is_finite($lat2)||!is_finite($lng2))return null;
+    if((abs($lat1)<0.0001&&abs($lng1)<0.0001)||(abs($lat2)<0.0001&&abs($lng2)<0.0001))return null;
+    if($lat1<-90||$lat1>90||$lat2<-90||$lat2>90||$lng1<-180||$lng1>180||$lng2<-180||$lng2>180)return null;
+    $r=6371.0;$dLat=deg2rad($lat2-$lat1);$dLng=deg2rad($lng2-$lng1);
+    $a=sin($dLat/2)**2+cos(deg2rad($lat1))*cos(deg2rad($lat2))*sin($dLng/2)**2;
+    $raw=2*$r*atan2(sqrt($a),sqrt(max(0.0,1.0-$a)));
+    return round(max(0.1,$raw),1);
+}
+function foodhubShippingFee(?float $distanceKm,float $baseFee=15000.0): float {
+    if($distanceKm===null||!is_finite($distanceKm)||$distanceKm<=3.0)return $baseFee;
+    $extraKm=max(1,(int)ceil(round($distanceKm-3.0,4)-1e-9));
+    return $baseFee+($extraKm*10000.0);
+}
+function foodhubDeliveryEstimate(?float $distanceKm,?int $prepMinutes): string {
+    $prep=($prepMinutes===null||$prepMinutes<=0||$prepMinutes>=28)?12:max(8,min(25,$prepMinutes));
+    if($distanceKm===null||!is_finite($distanceKm))return ($prep+8).'–'.($prep+15).' phút';
+    $travel=(int)ceil($distanceKm*2.5)+3;
+    $min=max(12,$prep+$travel);
+    $max=$min+($distanceKm>5.0?7:5);
+    return $min.'–'.$max.' phút';
 }
 function verifyToken(string $token, string $project): array {
     $parts=explode('.',$token);
@@ -74,9 +100,16 @@ function verifyToken(string $token, string $project): array {
     if(($claims['aud']??'')!==$project || ($claims['iss']??'')!=="https://securetoken.google.com/$project" || empty($claims['sub']) || ($claims['exp']??0)<=$now || ($claims['iat']??PHP_INT_MAX)>$now+60) out(401,['error'=>'Token hết hạn hoặc sai Firebase project']);
     return $claims;
 }
-function account(PDO $pdo,string $uid): array {
-    $s=$pdo->prepare('SELECT * FROM users WHERE firebase_uid=? AND deleted_at IS NULL');$s->execute([$uid]);$row=$s->fetch();
+function account(?PDO &$pdo,string $uid,bool $bypassCache=false): array {
+    $cacheKey='acct-'.hash('sha256',$uid).'.json';
+    if(!$bypassCache){
+        $cached=foodhubReadJsonCache($cacheKey,120);
+        if(is_array($cached)&&isset($cached['id'],$cached['role'],$cached['status']))return $cached;
+    }
+    $db=foodhubDb($pdo);
+    $s=$db->prepare('SELECT * FROM users WHERE firebase_uid=? AND deleted_at IS NULL');$s->execute([$uid]);$row=$s->fetch();
     if(!$row) out(404,['error'=>'Chưa có hồ sơ MySQL. Hãy gọi POST /users/me sau đăng nhập.']);
+    foodhubWriteJsonCache($cacheKey,$row);
     return $row;
 }
 function externalUser(array $r): array {
@@ -124,11 +157,20 @@ $config=require $configPath;
 date_default_timezone_set((string)($config['timezone']??'Asia/Ho_Chi_Minh'));
 $path=trim((string)parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH),'/');
 $parts=array_values(array_filter(explode('/',preg_replace('#^.*?/api/?#','',$path))));
-try {
-    $pdo=foodhubConnectDatabase($config['mysql'], $_SERVER['REQUEST_METHOD']==='GET');
-} catch(Throwable $e) { out(503,['error'=>'Không kết nối được database. Kiểm tra host, cổng, tài khoản, mật khẩu và chứng chỉ TLS trong config.local.php.']); }
-if(!$parts) out(200,['ok'=>true,'service'=>'FoodHub API','database'=>'connected']);
+$pdo=null;
+function foodhubDb(?PDO &$pdo): PDO {
+    if($pdo instanceof PDO)return $pdo;
+    global $config;
+    try {
+        $pdo=foodhubConnectDatabase($config['mysql'], true);
+        return $pdo;
+    } catch(Throwable $e) {
+        out(503,['error'=>'Không kết nối được database. Kiểm tra host, cổng, tài khoản, mật khẩu và chứng chỉ TLS trong config.local.php.']);
+    }
+}
+if(!$parts) { foodhubDb($pdo); out(200,['ok'=>true,'service'=>'FoodHub API','database'=>'connected']); }
 if(($parts[0]??'')==='payos' && ($parts[1]??'')==='webhook' && $_SERVER['REQUEST_METHOD']==='POST') {
+    foodhubDb($pdo);
     $checksum=trim((string)($config['payos']['checksum_key']??''));
     if($checksum==='')out(503,['error'=>'PayOS checksum key chưa được cấu hình']);
     $payload=json_decode((string)file_get_contents('php://input'),true);
@@ -153,31 +195,71 @@ $uid=(string)$claims['sub'];$method=$_SERVER['REQUEST_METHOD'];
 $resource=strtolower($parts[0]);$id=$parts[1]??null;
 
 if($resource==='ai' && $id==='meal-advisor' && $method==='POST' && count($parts)===2) {
+    foodhubDb($pdo);
     require $base.'/ai/meal-advisor-route.php';
+}
+if($resource==='ai' && $id==='order-drafts') {
+    foodhubDb($pdo);
+    require $base.'/ai/ai-order-draft-route.php';
+}
+if($resource==='ai' && in_array($id,['preferences','feedback','metrics'],true)) {
+    foodhubDb($pdo);
+    require $base.'/ai/ai-personalization-route.php';
+}
+if(($resource==='search' && $id==='history') || ($resource==='recommendations' && in_array($id,['personalized','preferences'],true))) {
+    foodhubDb($pdo);
+    require $base.'/recommendation/recommendation-route.php';
 }
 
 try {
-    if($resource==='device-tokens' && $method==='POST'){$u=account($pdo,$uid);$in=body();$token=trim((string)($in['token']??''));if($token==='')out(422,['error'=>'Thiếu FCM token']);$s=$pdo->prepare('INSERT INTO user_device_tokens(user_id,fcm_token,platform,last_seen_at) VALUES(?,?,?,NOW()) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),platform=VALUES(platform),last_seen_at=NOW()');$s->execute([$u['id'],$token,$in['platform']??'android']);out(200,['ok'=>true]);}
+    if($resource==='device-tokens' && $method==='POST'){$u=account($pdo,$uid);foodhubDb($pdo);$in=body();$token=trim((string)($in['token']??''));if($token==='')out(422,['error'=>'Thiếu FCM token']);$s=$pdo->prepare('INSERT INTO user_device_tokens(user_id,fcm_token,platform,last_seen_at) VALUES(?,?,?,NOW()) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),platform=VALUES(platform),last_seen_at=NOW()');$s->execute([$u['id'],$token,$in['platform']??'android']);out(200,['ok'=>true]);}
     if($resource==='conversations') {
-        $me=account($pdo,$uid);
+        $me=account($pdo,$uid);foodhubDb($pdo);
         if(($parts[2]??'')==='messages' && $id) {
             $member=$pdo->prepare('SELECT 1 FROM conversation_participants cp JOIN conversations c ON c.id=cp.conversation_id WHERE cp.conversation_id=? AND cp.user_id=?');$member->execute([$id,$me['id']]);if(!$member->fetchColumn()&&$me['role']!=='admin')out(403,['error'=>'Bạn không thuộc cuộc trò chuyện này']);
             if($method==='GET'){$s=$pdo->prepare('SELECT m.*,u.firebase_uid FROM messages m JOIN users u ON u.id=m.sender_user_id WHERE m.conversation_id=? AND m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 50');$s->execute([$id]);$rows=[];foreach(array_reverse($s->fetchAll()) as $r)$rows[]=['messageId'=>(string)$r['id'],'senderId'=>$r['firebase_uid'],'receiverId'=>'','content'=>$r['content']??'','imageUrl'=>$r['image_url'],'type'=>strtoupper($r['message_type']),'createdAt'=>$r['created_at'],'seen'=>(bool)$r['is_seen'],'delivered'=>(bool)$r['is_delivered'],'deleted'=>false];out(200,['data'=>$rows]);}
             if($method==='POST'){$in=body();if(($in['action']??'')==='read'){$pdo->prepare('UPDATE conversation_participants SET last_read_at=NOW() WHERE conversation_id=? AND user_id=?')->execute([$id,$me['id']]);$pdo->prepare('UPDATE messages SET is_seen=1 WHERE conversation_id=? AND sender_user_id<>?')->execute([$id,$me['id']]);out(200,['ok'=>true]);}$type=strtoupper((string)($in['type']??'TEXT'))==='IMAGE'?'image':'text';$s=$pdo->prepare('INSERT INTO messages(conversation_id,sender_user_id,message_type,content,image_url,is_delivered) VALUES(?,?,?,?,?,1)');$s->execute([$id,$me['id'],$type,$in['content']??null,$in['imageUrl']??null]);$messageId=(string)$pdo->lastInsertId();$last=$type==='image'?'Đã gửi một ảnh':(string)($in['content']??'');$pdo->prepare('UPDATE conversations SET updated_at=NOW() WHERE id=?')->execute([$id]);$recipients=$pdo->prepare('SELECT user_id FROM conversation_participants WHERE conversation_id=? AND user_id<>?');$recipients->execute([$id,$me['id']]);foreach($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId)notifyUser($pdo,$config,(int)$recipientId,null,'chat','Tin nhắn mới',$last);out(201,['id'=>$messageId,'data'=>['messageId'=>$messageId,'senderId'=>$uid,'content'=>$in['content']??'','imageUrl'=>$in['imageUrl']??null,'type'=>strtoupper($type),'createdAt'=>date('Y-m-d H:i:s'),'seen'=>false,'delivered'=>true,'lastMessage'=>$last]]);}
         }
-        if($method==='GET' && !$id){$sql='SELECT c.* FROM conversations c JOIN conversation_participants cp ON cp.conversation_id=c.id WHERE cp.user_id=?';$args=[$me['id']];if($me['role']==='admin'){$sql='SELECT DISTINCT c.* FROM conversations c LEFT JOIN conversation_participants cp ON cp.conversation_id=c.id WHERE cp.user_id=? OR c.type=\'support\'';}$sql.=' ORDER BY c.updated_at DESC';$s=$pdo->prepare($sql);$s->execute($args);$rows=[];foreach($s as $c){$p=$pdo->prepare('SELECT u.firebase_uid,u.role,cp.last_read_at FROM conversation_participants cp JOIN users u ON u.id=cp.user_id WHERE cp.conversation_id=?');$p->execute([$c['id']]);$participants=[];$roles=[];$unread=[];foreach($p as $pr){$participants[]=$pr['firebase_uid'];$roles[$pr['firebase_uid']]=$pr['role'];$unread[$pr['firebase_uid']]=0;}$last=$pdo->prepare('SELECT content,message_type,created_at,sender_user_id FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1');$last->execute([$c['id']]);$lm=$last->fetch();if($lm){foreach($p as $unused){}$readAt=$pdo->prepare('SELECT last_read_at FROM conversation_participants WHERE conversation_id=? AND user_id=?');$readAt->execute([$c['id'],$me['id']]);$ra=$readAt->fetchColumn();$q=$pdo->prepare('SELECT COUNT(*) FROM messages WHERE conversation_id=? AND sender_user_id<>? AND (? IS NULL OR created_at>?)');$q->execute([$c['id'],$me['id'],$ra,$ra]);$unread[$uid]=(int)$q->fetchColumn();}$rows[]=['id'=>(string)$c['id'],'participants'=>$participants,'participantRoles'=>$roles,'orderId'=>$c['order_id']===null?null:(string)$c['order_id'],'type'=>strtoupper($c['type']),'lastMessage'=>$lm?($lm['message_type']==='image'?'Đã gửi một ảnh':$lm['content']):'','lastMessageTime'=>$lm['created_at']??$c['created_at'],'createdAt'=>$c['created_at'],'unreadCount'=>$unread,'typing'=>(object)[]];}out(200,['data'=>$rows]);}
+        if($method==='GET' && !$id){
+            $sql='SELECT c.* FROM conversations c JOIN conversation_participants cp ON cp.conversation_id=c.id WHERE cp.user_id=?';$args=[$me['id']];
+            if($me['role']==='admin'){$sql='SELECT DISTINCT c.* FROM conversations c LEFT JOIN conversation_participants cp ON cp.conversation_id=c.id WHERE cp.user_id=? OR c.type=\'support\'';}
+            $sql.=' ORDER BY c.updated_at DESC LIMIT 100';$s=$pdo->prepare($sql);$s->execute($args);$convs=$s->fetchAll();
+            if(!$convs)out(200,['data'=>[]]);
+            $convIds=array_map(static fn($c)=>(int)$c['id'],$convs);$marks=implode(',',array_fill(0,count($convIds),'?'));
+            $partByConv=[];$myReadAt=[];
+            $pq=$pdo->prepare("SELECT cp.conversation_id,cp.user_id,cp.last_read_at,u.firebase_uid,u.role FROM conversation_participants cp JOIN users u ON u.id=cp.user_id WHERE cp.conversation_id IN ($marks)");
+            $pq->execute($convIds);
+            foreach($pq as $pr){$cid=(int)$pr['conversation_id'];$partByConv[$cid][]=$pr;if((int)$pr['user_id']===(int)$me['id'])$myReadAt[$cid]=$pr['last_read_at'];}
+            $lastByConv=[];
+            $lq=$pdo->prepare("SELECT m.conversation_id,m.content,m.message_type,m.created_at FROM messages m JOIN (SELECT conversation_id,MAX(id) AS max_id FROM messages WHERE conversation_id IN ($marks) AND deleted_at IS NULL GROUP BY conversation_id) latest ON latest.max_id=m.id");
+            $lq->execute($convIds);
+            foreach($lq as $lr)$lastByConv[(int)$lr['conversation_id']]=$lr;
+            $unreadByConv=[];
+            $uq=$pdo->prepare("SELECT m.conversation_id,COUNT(*) AS cnt FROM messages m LEFT JOIN conversation_participants cp ON cp.conversation_id=m.conversation_id AND cp.user_id=? WHERE m.conversation_id IN ($marks) AND m.deleted_at IS NULL AND m.sender_user_id<>? AND (cp.last_read_at IS NULL OR m.created_at>cp.last_read_at) GROUP BY m.conversation_id");
+            $uq->execute(array_merge([(int)$me['id']],$convIds,[(int)$me['id']]));
+            foreach($uq as $ur)$unreadByConv[(int)$ur['conversation_id']]=(int)$ur['cnt'];
+            $rows=[];
+            foreach($convs as $c){
+                $cid=(int)$c['id'];$participants=[];$roles=[];$unread=[];
+                foreach($partByConv[$cid]??[] as $pr){$participants[]=$pr['firebase_uid'];$roles[$pr['firebase_uid']]=$pr['role'];$unread[$pr['firebase_uid']]=0;}
+                $unread[$uid]=$unreadByConv[$cid]??0;$lm=$lastByConv[$cid]??null;
+                $rows[]=['id'=>(string)$cid,'participants'=>$participants,'participantRoles'=>$roles,'orderId'=>$c['order_id']===null?null:(string)$c['order_id'],'type'=>strtoupper($c['type']),'lastMessage'=>$lm?($lm['message_type']==='image'?'Đã gửi một ảnh':($lm['content']??'')):'','lastMessageTime'=>$lm['created_at']??$c['created_at'],'createdAt'=>$c['created_at'],'unreadCount'=>$unread,'typing'=>(object)[]];
+            }
+            out(200,['data'=>$rows]);
+        }
         if($method==='POST' && !$id){$in=body();$type=strtolower((string)($in['type']??'customer_store'));$type=$type==='support'?'support':(in_array($type,['customer_driver','customer_store'],true)?$type:'customer_store');$uids=array_values(array_unique(array_map('strval',$in['participants']??[$uid])));if(!in_array($uid,$uids,true))$uids[]=$uid;$pdo->beginTransaction();$find=$pdo->prepare('SELECT id FROM users WHERE firebase_uid=? AND deleted_at IS NULL');foreach($uids as $key=>$participantUid){if(ctype_digit($participantUid)){$storeOwner=$pdo->prepare('SELECT u.firebase_uid FROM stores s JOIN merchants m ON m.id=s.merchant_id JOIN users u ON u.id=m.owner_user_id WHERE s.id=? LIMIT 1');$storeOwner->execute([$participantUid]);$resolved=$storeOwner->fetchColumn();if($resolved)$uids[$key]=$resolved;}}$uids=array_values(array_unique($uids));$pdo->prepare('INSERT INTO conversations(order_id,type,created_by) VALUES(?,?,?)')->execute([isset($in['orderId'])&&$in['orderId']!==''?(int)$in['orderId']:null,$type,$me['id']]);$convId=(int)$pdo->lastInsertId();$add=$pdo->prepare('INSERT IGNORE INTO conversation_participants(conversation_id,user_id) VALUES(?,?)');foreach($uids as $participantUid){$find->execute([$participantUid]);$participantId=$find->fetchColumn();if($participantId)$add->execute([$convId,$participantId]);}$pdo->commit();out(201,['id'=>(string)$convId]);}
     }
     if($resource==='users' && $id!== 'me' && ($id!==null || $method==='GET')) {
-        $viewer=account($pdo,$uid);if($method==='GET' && $id!==null && $viewer['role']!=='admin'){$q=$pdo->prepare('SELECT 1 FROM conversation_participants a JOIN conversation_participants b ON b.conversation_id=a.conversation_id JOIN users u ON u.id=b.user_id WHERE a.user_id=? AND u.firebase_uid=? LIMIT 1');$q->execute([$viewer['id'],$id]);if(!$q->fetchColumn())out(403,['error'=>'Chỉ có thể xem thông tin người đang trò chuyện với bạn']);}
+        $viewer=account($pdo,$uid);foodhubDb($pdo);if($method==='GET' && $id!==null && $viewer['role']!=='admin'){$q=$pdo->prepare('SELECT 1 FROM conversation_participants a JOIN conversation_participants b ON b.conversation_id=a.conversation_id JOIN users u ON u.id=b.user_id WHERE a.user_id=? AND u.firebase_uid=? LIMIT 1');$q->execute([$viewer['id'],$id]);if(!$q->fetchColumn())out(403,['error'=>'Chỉ có thể xem thông tin người đang trò chuyện với bạn']);}
         elseif($viewer['role']!=='admin')out(403,['error'=>'Chỉ quản trị viên được quản lý tài khoản']);
         if($method==='GET'){if($id!==null){$q=$pdo->prepare('SELECT * FROM users WHERE firebase_uid=? AND deleted_at IS NULL');$q->execute([$id]);$user=$q->fetch();if(!$user)out(404,['error'=>'Không tìm thấy tài khoản']);out(200,['data'=>externalUser($user)]);}$q=$pdo->query('SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC');out(200,['data'=>array_map('externalUser',$q->fetchAll())]);}
-        if($method==='PATCH'){$in=body();$status=isset($in['isAvailable'])?((bool)$in['isAvailable']?'active':'suspended'):null;$q=$pdo->prepare('UPDATE users SET name=COALESCE(?,name),email=COALESCE(?,email),phone=COALESCE(?,phone),role=COALESCE(?,role),status=COALESCE(?,status) WHERE firebase_uid=? AND deleted_at IS NULL');$role=isset($in['role'])?match(strtolower((string)$in['role'])){'restaurant','seller'=>'seller','shipper','driver'=>'driver','admin'=>'admin',default=>'customer'}:null;$q->execute([$in['name']??$in['fullName']??null,$in['email']??null,$in['phone']??$in['phoneNumber']??null,$role,$status,$id]);out(200,['ok'=>true]);}
-        if($method==='DELETE'){$q=$pdo->prepare('UPDATE users SET status="suspended",deleted_at=NOW() WHERE firebase_uid=?');$q->execute([$id]);out(200,['ok'=>true]);}
+        if($method==='PATCH'){$in=body();$status=isset($in['isAvailable'])?((bool)$in['isAvailable']?'active':'suspended'):null;$q=$pdo->prepare('UPDATE users SET name=COALESCE(?,name),email=COALESCE(?,email),phone=COALESCE(?,phone),role=COALESCE(?,role),status=COALESCE(?,status) WHERE firebase_uid=? AND deleted_at IS NULL');$role=isset($in['role'])?match(strtolower((string)$in['role'])){'restaurant','seller'=>'seller','shipper','driver'=>'driver','admin'=>'admin',default=>'customer'}:null;$q->execute([$in['name']??$in['fullName']??null,$in['email']??null,$in['phone']??$in['phoneNumber']??null,$role,$status,$id]);foodhubInvalidateJsonCache('acct-'.hash('sha256',(string)$id).'.json','catalog-stores.json','catalog-dishes.json');out(200,['ok'=>true]);}
+        if($method==='DELETE'){$q=$pdo->prepare('UPDATE users SET status="suspended",deleted_at=NOW() WHERE firebase_uid=?');$q->execute([$id]);foodhubInvalidateJsonCache('acct-'.hash('sha256',(string)$id).'.json','catalog-stores.json','catalog-dishes.json');out(200,['ok'=>true]);}
     }
     if($resource==='users' && ($id==='me' || $id===null)) {
         if($method==='GET') { $u=account($pdo,$uid);out(200,['data'=>externalUser($u)]); }
         if($method==='POST' || $method==='PUT' || $method==='PATCH') {
+            foodhubDb($pdo);
             $in=body();$exists=$pdo->prepare('SELECT id FROM users WHERE firebase_uid=?');$exists->execute([$uid]);$old=$exists->fetch();
             $fullName=trim((string)($in['fullName']??$in['name']??''));
             $email=trim((string)($claims['email']??$in['email']??''));$phone=trim((string)($in['phoneNumber']??$in['phone']??''));
@@ -190,79 +272,165 @@ try {
                 $s=$pdo->prepare('UPDATE users SET name=COALESCE(NULLIF(?,\'\'),name),email=COALESCE(NULLIF(?,\'\'),email),phone=COALESCE(NULLIF(?,\'\'),phone),address_line=COALESCE(?,address_line),avatar_url=COALESCE(?,avatar_url),last_login_at=NOW() WHERE firebase_uid=?');
                 $s->execute([$fullName,$email,$phone,$in['address']??null,$in['avatarUrl']??null,$uid]);
             }
-            out(200,['data'=>externalUser(account($pdo,$uid))]);
+            out(200,['data'=>externalUser(account($pdo,$uid,true))]);
         }
     }
     if($resource==='addresses') {
-        $u=account($pdo,$uid);$userId=(int)$u['id'];
-        if($method==='GET') { $s=$pdo->prepare('SELECT * FROM user_addresses WHERE user_id=? ORDER BY is_default DESC,updated_at DESC');$s->execute([$userId]);out(200,['data'=>array_map(static fn($r)=>['id'=>(string)$r['id'],'label'=>$r['label'],'name'=>$r['receiver_name'],'receiverName'=>$r['receiver_name'],'phone'=>$r['receiver_phone'],'receiverPhone'=>$r['receiver_phone'],'address'=>$r['address_line'],'addressDetail'=>$r['address_line'],'ward'=>$r['ward'],'district'=>$r['district'],'city'=>$r['city'],'latitude'=>$r['latitude']===null?null:(float)$r['latitude'],'longitude'=>$r['longitude']===null?null:(float)$r['longitude'],'isDefault'=>(bool)$r['is_default']],$s->fetchAll())]); }
+        $u=account($pdo,$uid);$userId=(int)$u['id'];$addrCache='addrs-'.hash('sha256',$uid).'.json';
+        if($method==='GET') {
+            $cachedAddrs=foodhubReadJsonCache($addrCache,120);
+            if(is_array($cachedAddrs))out(200,['data'=>$cachedAddrs]);
+            foodhubDb($pdo);
+            $s=$pdo->prepare('SELECT * FROM user_addresses WHERE user_id=? ORDER BY is_default DESC,updated_at DESC');$s->execute([$userId]);
+            $rows=array_map(static fn($r)=>['id'=>(string)$r['id'],'label'=>$r['label'],'name'=>$r['receiver_name'],'receiverName'=>$r['receiver_name'],'phone'=>$r['receiver_phone'],'receiverPhone'=>$r['receiver_phone'],'address'=>$r['address_line'],'addressDetail'=>$r['address_line'],'ward'=>$r['ward'],'district'=>$r['district'],'city'=>$r['city'],'latitude'=>$r['latitude']===null?null:(float)$r['latitude'],'longitude'=>$r['longitude']===null?null:(float)$r['longitude'],'isDefault'=>(bool)$r['is_default']],$s->fetchAll());
+            foodhubWriteJsonCache($addrCache,$rows);
+            out(200,['data'=>$rows]);
+        }
+        foodhubDb($pdo);
         if(in_array($method,['POST','PUT','PATCH'],true)) {
             $in=body();$label=(string)($in['label']??$in['name']??'Địa chỉ');$receiver=(string)($in['receiverName']??$in['name']??'');$phone=(string)($in['receiverPhone']??$in['phone']??'');$address=(string)($in['address']??$in['addressDetail']??'');
             $lat=$in['latitude']??null;$lng=$in['longitude']??null;$default=(int)(bool)($in['isDefault']??false);
             $pdo->beginTransaction();if($default)$pdo->prepare('UPDATE user_addresses SET is_default=0 WHERE user_id=?')->execute([$userId]);
             if($id && ctype_digit($id)){$s=$pdo->prepare('UPDATE user_addresses SET label=?,receiver_name=?,receiver_phone=?,address_line=?,latitude=?,longitude=?,is_default=? WHERE id=? AND user_id=?');$s->execute([$label,$receiver,$phone,$address,$lat,$lng,$default,$id,$userId]);$newId=(int)$id;}
             else{$s=$pdo->prepare('INSERT INTO user_addresses(user_id,label,receiver_name,receiver_phone,address_line,latitude,longitude,is_default) VALUES(?,?,?,?,?,?,?,?)');$s->execute([$userId,$label,$receiver,$phone,$address,$lat,$lng,$default]);$newId=(int)$pdo->lastInsertId();}
-            $pdo->commit();out(200,['id'=>(string)$newId]);
+            $pdo->commit();foodhubInvalidateJsonCache($addrCache);out(200,['id'=>(string)$newId]);
         }
-        if($method==='DELETE' && $id){$s=$pdo->prepare('DELETE FROM user_addresses WHERE id=? AND user_id=?');$s->execute([$id,$userId]);out(200,['ok'=>true]);}
+        if($method==='DELETE' && $id){$s=$pdo->prepare('DELETE FROM user_addresses WHERE id=? AND user_id=?');$s->execute([$id,$userId]);foodhubInvalidateJsonCache($addrCache);out(200,['ok'=>true]);}
     }
     if($resource==='stores') {
         if($id==='mine') {
-            $u=account($pdo,$uid);
+            $u=account($pdo,$uid);foodhubDb($pdo);
             $owned=$pdo->prepare('SELECT s.* FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE m.owner_user_id=? AND s.deleted_at IS NULL ORDER BY s.id LIMIT 1');$owned->execute([$u['id']]);$store=$owned->fetch();
             if(!$store && $method==='POST') {
                 if(!in_array($u['role'],['seller','admin'],true))out(403,['error'=>'Tài khoản chưa có quyền quản lý cửa hàng']);$in=body();$pdo->beginTransaction();
                 $q=$pdo->prepare('SELECT id FROM merchants WHERE owner_user_id=? LIMIT 1');$q->execute([$u['id']]);$merchantId=$q->fetchColumn();
                 if(!$merchantId){$q=$pdo->prepare('INSERT INTO merchants(owner_user_id,brand_name,hotline,status) VALUES(?,?,?,?)');$q->execute([$u['id'],$in['name']??'Thương hiệu mới',$in['phone']??null,'active']);$merchantId=$pdo->lastInsertId();}
-                $q=$pdo->prepare('INSERT INTO stores(merchant_id,name,description,address_line,phone,email,open_time,close_time,cover_url,logo_url,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)');$q->execute([$merchantId,$in['name']??'Cửa hàng của tôi',$in['description']??null,$in['address']??null,$in['phone']??null,$in['email']??$u['email'],$in['openTime']??'08:00',$in['closeTime']??'22:00',$in['coverImage']??null,$in['avatarUrl']??null,'active']);$storeId=(int)$pdo->lastInsertId();$pdo->prepare('INSERT INTO store_staff(store_id,user_id,staff_role) VALUES(?,?,?)')->execute([$storeId,$u['id'],'owner']);$pdo->commit();$q=$pdo->prepare('SELECT * FROM stores WHERE id=?');$q->execute([$storeId]);$store=$q->fetch();
+                $q=$pdo->prepare('INSERT INTO stores(merchant_id,name,description,address_line,phone,email,open_time,close_time,cover_url,logo_url,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)');$q->execute([$merchantId,$in['name']??'Cửa hàng của tôi',$in['description']??null,$in['address']??null,$in['phone']??null,$in['email']??$u['email'],$in['openTime']??'08:00',$in['closeTime']??'22:00',$in['coverImage']??null,$in['avatarUrl']??null,'active']);$storeId=(int)$pdo->lastInsertId();$pdo->prepare('INSERT INTO store_staff(store_id,user_id,staff_role) VALUES(?,?,?)')->execute([$storeId,$u['id'],'owner']);$pdo->commit();foodhubInvalidateJsonCache('catalog-stores.json','catalog-dishes.json','catalog-categories');$q=$pdo->prepare('SELECT * FROM stores WHERE id=?');$q->execute([$storeId]);$store=$q->fetch();
             }
             if(!$store)out(404,['error'=>'Tài khoản chưa có cửa hàng']);
-            if(in_array($method,['PATCH','PUT'],true)){$in=body();$q=$pdo->prepare('UPDATE stores SET name=?,description=?,address_line=?,phone=?,email=?,open_time=?,close_time=?,cover_url=?,logo_url=?,is_open=?,order_notify=?,sound_notify=?,push_notify=?,email_notify=?,promo_notify=?,latitude=?,longitude=? WHERE id=?');$q->execute([$in['name']??$store['name'],$in['description']??$store['description'],$in['address']??$store['address_line'],$in['phone']??$store['phone'],$in['email']??$store['email'],$in['openTime']??$store['open_time'],$in['closeTime']??$store['close_time'],$in['coverImage']??$store['cover_url'],$in['avatarUrl']??$store['logo_url'],isset($in['isOpen'])?(int)(bool)$in['isOpen']:(int)$store['is_open'],isset($in['orderNotify'])?(int)(bool)$in['orderNotify']:(int)$store['order_notify'],isset($in['soundNotify'])?(int)(bool)$in['soundNotify']:(int)$store['sound_notify'],isset($in['pushNotify'])?(int)(bool)$in['pushNotify']:(int)$store['push_notify'],isset($in['emailNotify'])?(int)(bool)$in['emailNotify']:(int)$store['email_notify'],isset($in['promoNotify'])?(int)(bool)$in['promoNotify']:(int)$store['promo_notify'],$in['latitude']??$store['latitude'],$in['longitude']??$store['longitude'],$store['id']]);$q=$pdo->prepare('SELECT * FROM stores WHERE id=?');$q->execute([$store['id']]);$store=$q->fetch();}
+            if(in_array($method,['PATCH','PUT'],true)){$in=body();$q=$pdo->prepare('UPDATE stores SET name=?,description=?,address_line=?,phone=?,email=?,open_time=?,close_time=?,cover_url=?,logo_url=?,is_open=?,order_notify=?,sound_notify=?,push_notify=?,email_notify=?,promo_notify=?,latitude=?,longitude=? WHERE id=?');$q->execute([$in['name']??$store['name'],$in['description']??$store['description'],$in['address']??$store['address_line'],$in['phone']??$store['phone'],$in['email']??$store['email'],$in['openTime']??$store['open_time'],$in['closeTime']??$store['close_time'],$in['coverImage']??$store['cover_url'],$in['avatarUrl']??$store['logo_url'],isset($in['isOpen'])?(int)(bool)$in['isOpen']:(int)$store['is_open'],isset($in['orderNotify'])?(int)(bool)$in['orderNotify']:(int)$store['order_notify'],isset($in['soundNotify'])?(int)(bool)$in['soundNotify']:(int)$store['sound_notify'],isset($in['pushNotify'])?(int)(bool)$in['pushNotify']:(int)$store['push_notify'],isset($in['emailNotify'])?(int)(bool)$in['emailNotify']:(int)$store['email_notify'],isset($in['promoNotify'])?(int)(bool)$in['promoNotify']:(int)$store['promo_notify'],$in['latitude']??$store['latitude'],$in['longitude']??$store['longitude'],$store['id']]);foodhubInvalidateJsonCache('catalog-stores.json','catalog-dishes.json','catalog-categories');$q=$pdo->prepare('SELECT * FROM stores WHERE id=?');$q->execute([$store['id']]);$store=$q->fetch();}
             $data=['id'=>(string)$store['id'],'name'=>$store['name'],'rating'=>(float)$store['rating_avg'],'address'=>$store['address_line']??'','deliveryTime'=>(string)($store['avg_prep_minutes']??30),'distance'=>'','description'=>$store['description']??'','coverImage'=>$store['cover_url']??'','avatarUrl'=>$store['logo_url']??'','email'=>$store['email']??'','phone'=>$store['phone']??'','openTime'=>$store['open_time']??'','closeTime'=>$store['close_time']??'','orderNotify'=>(bool)$store['order_notify'],'soundNotify'=>(bool)$store['sound_notify'],'pushNotify'=>(bool)$store['push_notify'],'emailNotify'=>(bool)$store['email_notify'],'promoNotify'=>(bool)$store['promo_notify'],'latitude'=>$store['latitude']===null?null:(float)$store['latitude'],'longitude'=>$store['longitude']===null?null:(float)$store['longitude'],'isOpen'=>(bool)$store['is_open']];out(200,['data'=>$data]);
         }
-        if($method==='GET' && !$id){$s=$pdo->query("SELECT s.*,m.brand_name FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.status='active' AND s.deleted_at IS NULL ORDER BY s.name");$rows=[];foreach($s as $r)$rows[]=['id'=>(string)$r['id'],'name'=>$r['name'],'rating'=>(float)$r['rating_avg'],'address'=>$r['address_line']??'','deliveryTime'=>(string)($r['avg_prep_minutes']??30),'distance'=>'','description'=>$r['description']??'','coverImage'=>$r['cover_url']??'','avatarUrl'=>$r['logo_url']??'','email'=>$r['email']??'','phone'=>$r['phone']??'','openTime'=>$r['open_time']??'','closeTime'=>$r['close_time']??'','latitude'=>$r['latitude']===null?null:(float)$r['latitude'],'longitude'=>$r['longitude']===null?null:(float)$r['longitude']];out(200,['data'=>$rows]);}
-        if($method==='GET' && $id){$s=$pdo->prepare('SELECT * FROM stores WHERE id=? AND deleted_at IS NULL');$s->execute([$id]);$r=$s->fetch();if(!$r)out(404,['error'=>'Không tìm thấy cửa hàng']);out(200,['data'=>['id'=>(string)$r['id'],'name'=>$r['name'],'rating'=>(float)$r['rating_avg'],'address'=>$r['address_line']??'','deliveryTime'=>(string)($r['avg_prep_minutes']??30),'description'=>$r['description']??'','coverImage'=>$r['cover_url']??'','avatarUrl'=>$r['logo_url']??'','email'=>$r['email']??'','phone'=>$r['phone']??'','openTime'=>$r['open_time']??'','closeTime'=>$r['close_time']??'','latitude'=>$r['latitude']===null?null:(float)$r['latitude'],'longitude'=>$r['longitude']===null?null:(float)$r['longitude'],'isOpen'=>(bool)$r['is_open']]]);}
+        if($method==='GET'){
+            $uLat=isset($_GET['lat'])&&is_numeric($_GET['lat'])?(float)$_GET['lat']:null;$uLng=isset($_GET['lng'])&&is_numeric($_GET['lng'])?(float)$_GET['lng']:null;
+            $rawStores=foodhubReadJsonCache('catalog-stores.json',90);
+            if(!is_array($rawStores)){
+                foodhubDb($pdo);
+                $rawStores=$pdo->query("SELECT s.*,m.brand_name FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.status='active' AND s.deleted_at IS NULL ORDER BY s.name")->fetchAll();
+                foodhubWriteJsonCache('catalog-stores.json',$rawStores);
+            }
+            if(!$id){
+                $rows=[];foreach($rawStores as $r){$sLat=$r['latitude']===null?null:(float)$r['latitude'];$sLng=$r['longitude']===null?null:(float)$r['longitude'];$km=foodhubDistanceKm($sLat,$sLng,$uLat,$uLng);$prep=$r['avg_prep_minutes']===null?null:(int)$r['avg_prep_minutes'];$rows[]=['id'=>(string)$r['id'],'name'=>$r['name'],'rating'=>(float)$r['rating_avg'],'address'=>$r['address_line']??'','deliveryTime'=>$km!==null?foodhubDeliveryEstimate($km,$prep):(string)($r['avg_prep_minutes']??15),'distance'=>$km!==null?number_format($km,1,'.','').' km':'','distanceKm'=>$km,'shippingFee'=>foodhubShippingFee($km,(float)($config['delivery_fee']??15000)),'description'=>$r['description']??'','coverImage'=>$r['cover_url']??'','avatarUrl'=>$r['logo_url']??'','email'=>$r['email']??'','phone'=>$r['phone']??'','openTime'=>$r['open_time']??'','closeTime'=>$r['close_time']??'','latitude'=>$sLat,'longitude'=>$sLng];}
+                out(200,['data'=>$rows]);
+            }
+            $r=null;foreach($rawStores as $st){if((string)$st['id']===(string)$id){$r=$st;break;}}
+            if(!$r){foodhubDb($pdo);$s=$pdo->prepare('SELECT * FROM stores WHERE id=? AND deleted_at IS NULL');$s->execute([$id]);$r=$s->fetch();}
+            if(!$r)out(404,['error'=>'Không tìm thấy cửa hàng']);
+            $sLat=$r['latitude']===null?null:(float)$r['latitude'];$sLng=$r['longitude']===null?null:(float)$r['longitude'];$km=foodhubDistanceKm($sLat,$sLng,$uLat,$uLng);$prep=$r['avg_prep_minutes']===null?null:(int)$r['avg_prep_minutes'];
+            out(200,['data'=>['id'=>(string)$r['id'],'name'=>$r['name'],'rating'=>(float)$r['rating_avg'],'address'=>$r['address_line']??'','deliveryTime'=>$km!==null?foodhubDeliveryEstimate($km,$prep):(string)($r['avg_prep_minutes']??15),'distance'=>$km!==null?number_format($km,1,'.','').' km':'','distanceKm'=>$km,'shippingFee'=>foodhubShippingFee($km,(float)($config['delivery_fee']??15000)),'description'=>$r['description']??'','coverImage'=>$r['cover_url']??'','avatarUrl'=>$r['logo_url']??'','email'=>$r['email']??'','phone'=>$r['phone']??'','openTime'=>$r['open_time']??'','closeTime'=>$r['close_time']??'','latitude'=>$sLat,'longitude'=>$sLng,'isOpen'=>(bool)$r['is_open']]]);
+        }
     }
     if($resource==='dishes') {
         if($method==='DELETE') {
-            $u=account($pdo,$uid);if(!$id||!ctype_digit($id))out(400,['error'=>'ID món không hợp lệ']);
+            $u=account($pdo,$uid);foodhubDb($pdo);if(!$id||!ctype_digit($id))out(400,['error'=>'ID món không hợp lệ']);
             $q=$pdo->prepare('SELECT d.store_id,m.owner_user_id FROM dishes d JOIN stores s ON s.id=d.store_id JOIN merchants m ON m.id=s.merchant_id WHERE d.id=? AND d.deleted_at IS NULL');$q->execute([$id]);$dish=$q->fetch();
             if(!$dish)out(404,['error'=>'Không tìm thấy món']);
             if($u['role']!=='admin' && (int)$dish['owner_user_id']!==(int)$u['id'])out(403,['error'=>'Bạn không quản lý cửa hàng này']);
-            $pdo->prepare('UPDATE dishes SET deleted_at=NOW(),is_available=0 WHERE id=?')->execute([$id]);out(200,['ok'=>true]);
+            $pdo->prepare('UPDATE dishes SET deleted_at=NOW(),is_available=0 WHERE id=?')->execute([$id]);
+            foodhubInvalidateJsonCache('catalog-dishes.json','catalog-categories');
+            out(200,['ok'=>true]);
         }
         if($method==='GET'){
             $includeUnavailable=($_GET['includeUnavailable']??'0')==='1';
+            if(!$includeUnavailable){
+                $allDishes=foodhubReadJsonCache('catalog-dishes.json',90);
+                if(!is_array($allDishes)){
+                    foodhubDb($pdo);
+                    $q=$pdo->query("SELECT d.*,mc.name AS menu_category_name,s.name AS restaurant_name,s.address_line AS restaurant_address,s.logo_url AS restaurant_logo,s.is_open AS restaurant_open FROM dishes d JOIN stores s ON s.id=d.store_id LEFT JOIN menu_categories mc ON mc.id=d.menu_category_id WHERE d.deleted_at IS NULL AND s.status='active' AND d.is_available=1 ORDER BY d.created_at DESC");
+                    $allDishes=$q->fetchAll();
+                    foodhubWriteJsonCache('catalog-dishes.json',$allDishes);
+                }
+                if($id!==null){
+                    if(!ctype_digit($id))out(400,['error'=>'ID món không hợp lệ']);
+                    foreach($allDishes as $r){
+                        if((string)$r['id']===(string)$id){
+                            out(200,['data'=>['id'=>(string)$r['id'],'name'=>$r['name'],'price'=>(float)$r['price'],'imageUrl'=>$r['image_url']??'','category'=>$r['menu_category_name']??(string)($r['platform_category_id']??''),'description'=>$r['description']??'','available'=>(bool)$r['is_available'],'restaurantId'=>(string)$r['store_id'],'restaurantName'=>$r['restaurant_name']??'','restaurantAddress'=>$r['restaurant_address']??'','restaurantLogo'=>$r['restaurant_logo']??'','restaurantOpen'=>(bool)$r['restaurant_open'],'ratingAvg'=>(float)($r['rating_avg']??0),'ratingCount'=>(int)($r['rating_count']??0)]]);
+                        }
+                    }
+                    foodhubDb($pdo);
+                    $q=$pdo->prepare("SELECT d.*,mc.name AS menu_category_name,s.name AS restaurant_name,s.address_line AS restaurant_address,s.logo_url AS restaurant_logo,s.is_open AS restaurant_open FROM dishes d JOIN stores s ON s.id=d.store_id LEFT JOIN menu_categories mc ON mc.id=d.menu_category_id WHERE d.id=? AND d.deleted_at IS NULL AND s.status='active' LIMIT 1");
+                    $q->execute([$id]);$r=$q->fetch();
+                    if(!$r)out(404,['error'=>'Không tìm thấy món ăn']);
+                    out(200,['data'=>['id'=>(string)$r['id'],'name'=>$r['name'],'price'=>(float)$r['price'],'imageUrl'=>$r['image_url']??'','category'=>$r['menu_category_name']??(string)($r['platform_category_id']??''),'description'=>$r['description']??'','available'=>(bool)$r['is_available'],'restaurantId'=>(string)$r['store_id'],'restaurantName'=>$r['restaurant_name']??'','restaurantAddress'=>$r['restaurant_address']??'','restaurantLogo'=>$r['restaurant_logo']??'','restaurantOpen'=>(bool)$r['restaurant_open'],'ratingAvg'=>(float)($r['rating_avg']??0),'ratingCount'=>(int)($r['rating_count']??0)]]);
+                }
+                $storeId=(int)($_GET['restaurantId']??0);
+                $catParam=isset($_GET['category'])?trim((string)$_GET['category']):'';
+                $rows=[];
+                foreach($allDishes as $r){
+                    if($storeId && (int)$r['store_id']!==$storeId)continue;
+                    if($catParam!==''){
+                        if(ctype_digit($catParam)){if((int)($r['platform_category_id']??0)!==(int)$catParam && (int)($r['menu_category_id']??0)!==(int)$catParam)continue;}
+                        elseif(mb_strtolower((string)($r['menu_category_name']??''),'UTF-8')!==mb_strtolower($catParam,'UTF-8'))continue;
+                    }
+                    $rows[]=['id'=>(string)$r['id'],'name'=>$r['name'],'price'=>(float)$r['price'],'imageUrl'=>$r['image_url']??'','category'=>$r['menu_category_name']??(string)($r['platform_category_id']??''),'description'=>$r['description']??'','available'=>(bool)$r['is_available'],'restaurantId'=>(string)$r['store_id']];
+                }
+                out(200,['data'=>$rows]);
+            }
             $storeId=(int)($_GET['restaurantId']??0);
-            if($includeUnavailable){$u=account($pdo,$uid);$owner=$pdo->prepare('SELECT 1 FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.id=? AND (?=1 OR m.owner_user_id=?)');$owner->execute([$storeId,$u['role']==='admin'?1:0,$u['id']]);if(!$owner->fetchColumn())out(403,['error'=>'Bạn không quản lý cửa hàng này']);}
+            $u=account($pdo,$uid);foodhubDb($pdo);$owner=$pdo->prepare('SELECT 1 FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.id=? AND (?=1 OR m.owner_user_id=?)');$owner->execute([$storeId,$u['role']==='admin'?1:0,$u['id']]);if(!$owner->fetchColumn())out(403,['error'=>'Bạn không quản lý cửa hàng này']);
             $sql="SELECT d.*,mc.name AS menu_category_name FROM dishes d JOIN stores s ON s.id=d.store_id LEFT JOIN menu_categories mc ON mc.id=d.menu_category_id WHERE d.deleted_at IS NULL AND s.status='active'";
-            if(!$includeUnavailable)$sql.=' AND d.is_available=1';
             $params=[];if($storeId){$sql.=' AND d.store_id=?';$params[]=$storeId;}
-            if(isset($_GET['category'])){$sql.=' AND (d.platform_category_id=? OR d.menu_category_id=?)';$params[]=$_GET['category'];$params[]=$_GET['category'];}
+            if(isset($_GET['category']) && trim((string)$_GET['category'])!==''){$catParam=trim((string)$_GET['category']);if(ctype_digit($catParam)){$sql.=' AND (d.platform_category_id=? OR d.menu_category_id=?)';$params[]=(int)$catParam;$params[]=(int)$catParam;}else{$sql.=' AND LOWER(mc.name)=LOWER(?)';$params[]=$catParam;}}
             $sql.=' ORDER BY d.created_at DESC';$s=$pdo->prepare($sql);$s->execute($params);$rows=[];
             foreach($s as $r)$rows[]=['id'=>(string)$r['id'],'name'=>$r['name'],'price'=>(float)$r['price'],'imageUrl'=>$r['image_url']??'','category'=>$r['menu_category_name']??(string)($r['platform_category_id']??''),'description'=>$r['description']??'','available'=>(bool)$r['is_available'],'restaurantId'=>(string)$r['store_id']];out(200,['data'=>$rows]);
         }
         if(in_array($method,['POST','PUT','PATCH'],true)) {
-            $in=body();$storeId=(int)($in['restaurantId']??0);$u=account($pdo,$uid);
+            $in=body();$storeId=(int)($in['restaurantId']??0);$u=account($pdo,$uid);foodhubDb($pdo);
             if($u['role']!=='seller' && $u['role']!=='admin')out(403,['error'=>'Chỉ tài khoản cửa hàng được quản lý món']);
             $owner=$pdo->prepare('SELECT 1 FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.id=? AND (?=1 OR m.owner_user_id=?)');$owner->execute([$storeId,$u['role']==='admin'?1:0,$u['id']]);if(!$owner->fetchColumn())out(403,['error'=>'Bạn không quản lý cửa hàng này']);
-            $catId=null;$menuCatId=null;$cat=trim((string)($in['category']??''));
-            if($cat!==''&&ctype_digit($cat)){$catId=(int)$cat;}
-            elseif($cat!==''){$q=$pdo->prepare('SELECT id FROM menu_categories WHERE store_id=? AND name=? LIMIT 1');$q->execute([$storeId,$cat]);$menuCatId=$q->fetchColumn();if(!$menuCatId){$q=$pdo->prepare('INSERT INTO menu_categories(store_id,name) VALUES(?,?)');$q->execute([$storeId,$cat]);$menuCatId=$pdo->lastInsertId();}}
+            $catId=null;$menuCatId=null;$cat=mb_substr(trim((string)preg_replace('/\s+/u',' ',(string)($in['category']??''))),0,120,'UTF-8');
+            if($cat===''){$cat='Món chính';}
+            if(ctype_digit($cat)){$catId=(int)$cat;}
+            else{$q=$pdo->prepare('SELECT id FROM menu_categories WHERE store_id=? AND LOWER(name)=LOWER(?) LIMIT 1');$q->execute([$storeId,$cat]);$menuCatId=$q->fetchColumn();if(!$menuCatId){$q=$pdo->prepare('INSERT INTO menu_categories(store_id,name) VALUES(?,?)');$q->execute([$storeId,$cat]);$menuCatId=$pdo->lastInsertId();}}
             $name=trim((string)($in['name']??''));$price=max(0,(float)($in['price']??0));$image=$in['imageUrl']??null;$desc=$in['description']??null;$available=(int)(bool)($in['available']??true);
-            if($method==='POST'){$q=$pdo->prepare('INSERT INTO dishes(store_id,platform_category_id,menu_category_id,name,description,image_url,price,is_available) VALUES(?,?,?,?,?,?,?,?)');$q->execute([$storeId,$catId,$menuCatId,$name,$desc,$image,$price,$available]);out(201,['id'=>(string)$pdo->lastInsertId()]);}
+            if($method==='POST'){$q=$pdo->prepare('INSERT INTO dishes(store_id,platform_category_id,menu_category_id,name,description,image_url,price,is_available) VALUES(?,?,?,?,?,?,?,?)');$q->execute([$storeId,$catId,$menuCatId,$name,$desc,$image,$price,$available]);foodhubInvalidateJsonCache('catalog-dishes.json','catalog-categories');out(201,['id'=>(string)$pdo->lastInsertId()]);}
             if(!$id||!ctype_digit($id))out(400,['error'=>'ID món không hợp lệ']);
-            $q=$pdo->prepare('UPDATE dishes SET name=?,platform_category_id=?,menu_category_id=?,description=?,image_url=?,price=?,is_available=? WHERE id=? AND store_id=?');$q->execute([$name,$catId,$menuCatId,$desc,$image,$price,$available,$id,$storeId]);out(200,['ok'=>true]);
+            $q=$pdo->prepare('UPDATE dishes SET name=?,platform_category_id=?,menu_category_id=?,description=?,image_url=?,price=?,is_available=? WHERE id=? AND store_id=?');$q->execute([$name,$catId,$menuCatId,$desc,$image,$price,$available,$id,$storeId]);foodhubInvalidateJsonCache('catalog-dishes.json','catalog-categories');out(200,['ok'=>true]);
         }
+    }
+    if($resource==='categories' && $method==='GET') {
+        $storeId=(int)($_GET['restaurantId']??0);
+        $catCache='catalog-categories-'.$storeId.'.json';
+        $cachedCats=foodhubReadJsonCache($catCache,90);
+        if(is_array($cachedCats))out(200,['data'=>$cachedCats]);
+        foodhubDb($pdo);
+        $sql="SELECT mc.name,COUNT(d.id) AS dish_count FROM menu_categories mc JOIN stores s ON s.id=mc.store_id LEFT JOIN dishes d ON d.menu_category_id=mc.id AND d.deleted_at IS NULL AND d.is_available=1 WHERE mc.is_active=1 AND s.deleted_at IS NULL AND s.status='active'";
+        $params=[];if($storeId){$sql.=' AND mc.store_id=?';$params[]=$storeId;}
+        $sql.=' GROUP BY mc.name ORDER BY dish_count DESC,mc.name ASC';
+        $q=$pdo->prepare($sql);$q->execute($params);
+        $rows=[];foreach($q as $r)$rows[]=['name'=>$r['name'],'dishCount'=>(int)$r['dish_count']];
+        foodhubWriteJsonCache($catCache,$rows);
+        out(200,['data'=>$rows]);
     }
     if($resource==='promotions' || $resource==='vouchers') {
         $u=account($pdo,$uid);
-        if($method==='GET'){$sql='SELECT * FROM vouchers';if($u['role']!=='admin')$sql.=' WHERE is_active=1 AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW())';$sql.=' ORDER BY created_at DESC';$s=$pdo->query($sql);$rows=[];foreach($s as $r)$rows[]=['id'=>(string)$r['id'],'code'=>$r['code'],'imageUrl'=>$r['image_url']??'','type'=>$r['discount_type'],'value'=>(float)$r['discount_value'],'maxDiscount'=>(float)($r['max_discount']??0),'minOrderValue'=>(float)$r['min_order_amount'],'usageCount'=>(int)$r['used_count'],'usageLimit'=>(int)($r['usage_limit']??0),'description'=>$r['description']??'','title'=>$r['title'],'status'=>$r['is_active']?'active':'expired','startDate'=>$r['starts_at'],'endDate'=>$r['ends_at']];out(200,['data'=>$rows]);}
+        if($method==='GET'){
+            if($u['role']!=='admin'){
+                $cachedVouchers=foodhubReadJsonCache('catalog-vouchers.json',60);
+                if(is_array($cachedVouchers))out(200,['data'=>$cachedVouchers]);
+            }
+            foodhubDb($pdo);
+            $sql='SELECT * FROM vouchers';if($u['role']!=='admin')$sql.=' WHERE is_active=1 AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW())';$sql.=' ORDER BY created_at DESC';$s=$pdo->query($sql);$rows=[];foreach($s as $r)$rows[]=['id'=>(string)$r['id'],'code'=>$r['code'],'imageUrl'=>$r['image_url']??'','type'=>$r['discount_type'],'value'=>(float)$r['discount_value'],'maxDiscount'=>(float)($r['max_discount']??0),'minOrderValue'=>(float)$r['min_order_amount'],'usageCount'=>(int)$r['used_count'],'usageLimit'=>(int)($r['usage_limit']??0),'description'=>$r['description']??'','title'=>$r['title'],'status'=>$r['is_active']?'active':'expired','startDate'=>$r['starts_at'],'endDate'=>$r['ends_at']];
+            if($u['role']!=='admin')foodhubWriteJsonCache('catalog-vouchers.json',$rows);
+            out(200,['data'=>$rows]);
+        }
+        foodhubDb($pdo);
         if($u['role']!=='admin')out(403,['error'=>'Chỉ admin được quản lý voucher']);
-        if($method==='POST'){$in=body();$q=$pdo->prepare('INSERT INTO vouchers(store_id,code,title,description,discount_type,discount_value,max_discount,min_order_amount,usage_limit,used_count,starts_at,ends_at,is_active) VALUES(?,?,?,?,?,?,?,?,?,0,?,?,?)');$q->execute([isset($in['storeId'])?(int)$in['storeId']:null,$in['code']??'', $in['title']??'', $in['description']??null,$in['type']??'percentage',(float)($in['value']??0),$in['maxDiscount']??null,(float)($in['minOrderValue']??0),isset($in['usageLimit'])?(int)$in['usageLimit']:null,$in['startDate']??null,$in['endDate']??null,($in['status']??'active')==='active'?1:0]);out(201,['id'=>(string)$pdo->lastInsertId()]);}
-        if($method==='PATCH' && $id){$in=body();if(isset($in['status'])){$q=$pdo->prepare('UPDATE vouchers SET is_active=? WHERE id=?');$q->execute([$in['status']==='active'?1:0,$id]);}out(200,['ok'=>true]);}
-        if($method==='DELETE' && $id){$q=$pdo->prepare('DELETE FROM vouchers WHERE id=?');$q->execute([$id]);out(200,['ok'=>true]);}
+        if($method==='POST'){$in=body();$q=$pdo->prepare('INSERT INTO vouchers(store_id,code,title,description,discount_type,discount_value,max_discount,min_order_amount,usage_limit,used_count,starts_at,ends_at,is_active) VALUES(?,?,?,?,?,?,?,?,?,0,?,?,?)');$q->execute([isset($in['storeId'])?(int)$in['storeId']:null,$in['code']??'', $in['title']??'', $in['description']??null,$in['type']??'percentage',(float)($in['value']??0),$in['maxDiscount']??null,(float)($in['minOrderValue']??0),isset($in['usageLimit'])?(int)$in['usageLimit']:null,$in['startDate']??null,$in['endDate']??null,($in['status']??'active')==='active'?1:0]);foodhubInvalidateJsonCache('catalog-vouchers.json');out(201,['id'=>(string)$pdo->lastInsertId()]);}
+        if($method==='PATCH' && $id){$in=body();if(isset($in['status'])){$q=$pdo->prepare('UPDATE vouchers SET is_active=? WHERE id=?');$q->execute([$in['status']==='active'?1:0,$id]);}foodhubInvalidateJsonCache('catalog-vouchers.json');out(200,['ok'=>true]);}
+        if($method==='DELETE' && $id){$q=$pdo->prepare('DELETE FROM vouchers WHERE id=?');$q->execute([$id]);foodhubInvalidateJsonCache('catalog-vouchers.json');out(200,['ok'=>true]);}
     }
+    foodhubDb($pdo);
     if($resource==='activity_logs') {
         $u=account($pdo,$uid);
         if($method==='POST'){$in=body();$storeId=isset($in['storeId'])?(int)$in['storeId']:null;if($storeId===null){$q=$pdo->prepare('SELECT s.id FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE m.owner_user_id=? ORDER BY s.id LIMIT 1');$q->execute([$u['id']]);$storeId=$q->fetchColumn()?:null;}$q=$pdo->prepare('INSERT INTO activity_logs(actor_user_id,store_id,type,title,description,details) VALUES(?,?,?,?,?,?)');$q->execute([$u['id'],$storeId,$in['type']??'general',$in['title']??'Hoạt động',$in['description']??null,$in['details']??null]);out(201,['id'=>(string)$pdo->lastInsertId()]);}
@@ -306,10 +474,10 @@ try {
             $itemsByOrder=[];
             foreach(array_chunk(array_column($orders,'id'),500) as $ids){
                 $marks=implode(',',array_fill(0,count($ids),'?'));
-                $itemsQuery=$pdo->prepare("SELECT order_id,dish_id,dish_name,quantity,unit_price FROM order_items WHERE order_id IN ($marks) ORDER BY order_id,id");
+                $itemsQuery=$pdo->prepare("SELECT oi.order_id,oi.dish_id,oi.dish_name,oi.quantity,oi.unit_price,d.image_url AS dish_image_url FROM order_items oi LEFT JOIN dishes d ON d.id=oi.dish_id WHERE oi.order_id IN ($marks) ORDER BY oi.order_id,oi.id");
                 $itemsQuery->execute($ids);
                 foreach($itemsQuery as $i){
-                    $itemsByOrder[$i['order_id']][]=['dishId'=>(string)($i['dish_id']??''),'name'=>$i['dish_name'],'quantity'=>(int)$i['quantity'],'price'=>(float)$i['unit_price']];
+                    $itemsByOrder[$i['order_id']][]=['dishId'=>(string)($i['dish_id']??''),'name'=>$i['dish_name'],'quantity'=>(int)$i['quantity'],'price'=>(float)$i['unit_price'],'imageUrl'=>$i['dish_image_url']??''];
                 }
             }
             foreach($orders as $o){$items=$itemsByOrder[$o['id']]??[];$rows[]=['id'=>(string)$o['id'],'time'=>$o['placed_at'],'completedAt'=>$o['completed_at']??$o['delivered_at']??null,'status'=>strtoupper($o['status']),'paymentMethod'=>strtoupper($o['payment_method']),'isPaid'=>$o['payment_status']==='paid','totalDishPrice'=>(float)$o['subtotal'],'shippingFee'=>(float)$o['delivery_fee'],'totalPrice'=>(float)$o['total_amount'],'userId'=>$o['customer_uid'],'customerName'=>$o['receiver_name'],'customerPhone'=>$o['receiver_phone'],'customerAddress'=>$o['delivery_address'],'customerLat'=>$o['delivery_lat']===null?null:(float)$o['delivery_lat'],'customerLng'=>$o['delivery_lng']===null?null:(float)$o['delivery_lng'],'restaurantId'=>(string)$o['store_id'],'restaurantName'=>$o['store_name'],'restaurantLat'=>$o['restaurant_lat']===null?null:(float)$o['restaurant_lat'],'restaurantLng'=>$o['restaurant_lng']===null?null:(float)$o['restaurant_lng'],'restaurantCoverImage'=>$o['restaurant_cover']??'','shipperId'=>$o['shipper_uid']??'','items'=>$items];}
@@ -319,11 +487,14 @@ try {
             if($u['role']!=='customer')out(403,['error'=>'Chỉ khách hàng được tạo đơn']);$in=body();$items=$in['items']??[];$storeId=(int)($in['restaurantId']??0);if(!$storeId||!is_array($items)||!count($items))out(422,['error'=>'Thiếu cửa hàng hoặc món']);
             $pdo->beginTransaction();try{$store=$pdo->prepare('SELECT id,name,latitude,longitude FROM stores WHERE id=? AND is_open=1 AND status=\'active\' FOR UPDATE');$store->execute([$storeId]);$sr=$store->fetch();if(!$sr)throw new RuntimeException('Cửa hàng hiện không nhận đơn');
                 $priced=[];$subtotal=0.0;foreach($items as $item){$dishId=(int)($item['dishId']??0);$qty=max(1,min(99,(int)($item['quantity']??1)));$q=$pdo->prepare('SELECT id,name,price,store_id FROM dishes WHERE id=? AND is_available=1 AND deleted_at IS NULL');$q->execute([$dishId]);$d=$q->fetch();if(!$d||(int)$d['store_id']!==$storeId)throw new RuntimeException('Món không hợp lệ hoặc không thuộc cùng cửa hàng');$priced[]=[$d,$qty];$subtotal+=(float)$d['price']*$qty;}
-                $fee=(float)$config['delivery_fee'];$discount=0.0;$voucherId=(int)($in['appliedPromotionId']??0);$voucher=null;
+                $storeLat=$sr['latitude']!==null?(float)$sr['latitude']:null;$storeLng=$sr['longitude']!==null?(float)$sr['longitude']:null;
+                $custLat=isset($in['customerLat'])&&is_numeric($in['customerLat'])?(float)$in['customerLat']:null;$custLng=isset($in['customerLng'])&&is_numeric($in['customerLng'])?(float)$in['customerLng']:null;
+                $distKm=foodhubDistanceKm($storeLat,$storeLng,$custLat,$custLng);
+                $fee=foodhubShippingFee($distKm,(float)($config['delivery_fee']??15000));$discount=0.0;$voucherId=(int)($in['appliedPromotionId']??0);$voucher=null;
                 if($voucherId){$q=$pdo->prepare('SELECT * FROM vouchers WHERE id=? AND is_active=1 AND (store_id IS NULL OR store_id=?) AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW()) FOR UPDATE');$q->execute([$voucherId,$storeId]);$voucher=$q->fetch();if(!$voucher)throw new RuntimeException('Voucher không còn hiệu lực cho cửa hàng này');if($subtotal<(float)$voucher['min_order_amount'])throw new RuntimeException('Đơn hàng chưa đạt giá trị tối thiểu của voucher');if($voucher['usage_limit']!==null&&(int)$voucher['used_count']>=(int)$voucher['usage_limit'])throw new RuntimeException('Voucher đã hết lượt sử dụng');if($voucher['discount_type']==='percentage'){$discount=$subtotal*(float)$voucher['discount_value']/100;if($voucher['max_discount']!==null)$discount=min($discount,(float)$voucher['max_discount']);}elseif($voucher['discount_type']==='fixed')$discount=(float)$voucher['discount_value'];elseif($voucher['discount_type']==='free_shipping')$discount=$fee;$discount=min($discount,$subtotal+$fee);}
                 $total=max(0,$subtotal+$fee-$discount);$address=(string)($in['customerAddress']??'');$receiver=(string)($in['customerName']??$u['name']);$phone=(string)($in['customerPhone']??$u['phone']);$method=strtolower((string)($in['paymentMethod']??'cash'));$method=in_array($method,['payos','online'],true)?'payos':'cash';$initialStatus=$method==='payos'?'pending_payment':'pending';$code='FH'.date('ymd').strtoupper(bin2hex(random_bytes(4)));
                 $q=$pdo->prepare('INSERT INTO orders(code,customer_id,store_id,status,receiver_name,receiver_phone,delivery_address,delivery_lat,delivery_lng,customer_note,subtotal,delivery_fee,discount_amount,total_amount,payment_method,payment_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');$q->execute([$code,$userId,$storeId,$initialStatus,$receiver,$phone,$address,$in['customerLat']??null,$in['customerLng']??null,$in['note']??null,$subtotal,$fee,$discount,$total,$method,'pending']);$orderId=(int)$pdo->lastInsertId();
-                $ins=$pdo->prepare('INSERT INTO order_items(order_id,dish_id,dish_name,unit_price,quantity,line_total) VALUES(?,?,?,?,?,?)');foreach($priced as [$d,$qty])$ins->execute([$orderId,$d['id'],$d['name'],$d['price'],$qty,(float)$d['price']*$qty]);if($voucher){$pdo->prepare('INSERT INTO order_vouchers(order_id,voucher_id,discount_amount) VALUES(?,?,?)')->execute([$orderId,$voucherId,$discount]);$pdo->prepare('UPDATE vouchers SET used_count=used_count+1 WHERE id=?')->execute([$voucherId]);}$pdo->prepare('INSERT INTO order_status_logs(order_id,status,actor_user_id) VALUES(?,?,?)')->execute([$orderId,$initialStatus,$userId]);$pdo->prepare('INSERT INTO deliveries(order_id,status,delivery_fee) VALUES(?,?,?)')->execute([$orderId,'unassigned',$fee]);$pdo->prepare('INSERT INTO payments(order_id,provider,method,amount,status) VALUES(?,?,?,?,?)')->execute([$orderId,$method,$method,$total,'pending']);$pdo->commit();$ownerQ=$pdo->prepare('SELECT m.owner_user_id FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.id=?');$ownerQ->execute([$storeId]);$sellerId=$ownerQ->fetchColumn();if($sellerId)notifyUser($pdo,$config,(int)$sellerId,$orderId,'new_order','Có đơn hàng mới',"Bạn vừa nhận đơn #$code");out(201,['id'=>(string)$orderId,'data'=>['id'=>(string)$orderId,'status'=>strtoupper($initialStatus),'totalPrice'=>$total,'restaurantId'=>(string)$storeId]]);
+                $ins=$pdo->prepare('INSERT INTO order_items(order_id,dish_id,dish_name,unit_price,quantity,line_total) VALUES(?,?,?,?,?,?)');foreach($priced as [$d,$qty])$ins->execute([$orderId,$d['id'],$d['name'],$d['price'],$qty,(float)$d['price']*$qty]);if($voucher){$pdo->prepare('INSERT INTO order_vouchers(order_id,voucher_id,discount_amount) VALUES(?,?,?)')->execute([$orderId,$voucherId,$discount]);$pdo->prepare('UPDATE vouchers SET used_count=used_count+1 WHERE id=?')->execute([$voucherId]);}$pdo->prepare('INSERT INTO order_status_logs(order_id,status,actor_user_id) VALUES(?,?,?)')->execute([$orderId,$initialStatus,$userId]);$pdo->prepare('INSERT INTO deliveries(order_id,status,delivery_fee) VALUES(?,?,?)')->execute([$orderId,'unassigned',$fee]);$pdo->prepare('INSERT INTO payments(order_id,provider,method,amount,status) VALUES(?,?,?,?,?)')->execute([$orderId,$method,$method,$total,'pending']);$pdo->commit();if($voucher)foodhubInvalidateJsonCache('catalog-vouchers.json');$ownerQ=$pdo->prepare('SELECT m.owner_user_id FROM stores s JOIN merchants m ON m.id=s.merchant_id WHERE s.id=?');$ownerQ->execute([$storeId]);$sellerId=$ownerQ->fetchColumn();if($sellerId)notifyUser($pdo,$config,(int)$sellerId,$orderId,'new_order','Có đơn hàng mới',"Bạn vừa nhận đơn #$code");out(201,['id'=>(string)$orderId,'data'=>['id'=>(string)$orderId,'status'=>strtoupper($initialStatus),'totalPrice'=>$total,'restaurantId'=>(string)$storeId]]);
             }catch(Throwable $e){$pdo->rollBack();out(422,['error'=>$e->getMessage()]);}
         }
         if($method==='PATCH' && $id){$in=body();$status=strtolower((string)($in['status']??''));$allowed=['pending','processing','accepted','shipping','completed','cancelled'];if(!in_array($status,$allowed,true))out(422,['error'=>'Trạng thái đơn không hợp lệ']);

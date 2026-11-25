@@ -1,5 +1,6 @@
 package com.example.dacs_3_composer.feature.customer.home.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,35 +17,44 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-// 🌟 Nhớ import class dữ liệu thật vào đây:
 import com.example.dacs_3_composer.core.model.RestaurantDetail
+import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
+import java.util.Locale
 
 @Composable
 fun RestaurantItem(
-    restaurant: RestaurantDetail, // 🌟 SỬA TẠI ĐÂY: Đổi từ Restaurant sang RestaurantDetail
+    restaurant: RestaurantDetail,
     modifier: Modifier = Modifier
 ) {
+    val ratingText = if (restaurant.rating > 0.0) {
+        String.format(Locale.US, "%.1f", restaurant.rating)
+    } else {
+        "Mới"
+    }
+    val timeText = restaurant.deliveryTime.let { raw ->
+        if (raw.contains("phút") || raw.contains("min")) raw else "${raw} phút"
+    }
+    val distanceText = restaurant.distance.ifBlank { "Chưa rõ vị trí" }
+    val feeText = DeliveryEstimate.formatFee(restaurant.shippingFee)
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(14.dp)
     ) {
         Column {
-            // 1. Ảnh bìa nhà hàng lấy từ link ảnh thật trên Firebase (Dùng AsyncImage của Coil)
             AsyncImage(
-                model = restaurant.coverImage, // Đổi từ imageRes sang coverImage
+                model = restaurant.coverImage,
                 contentDescription = restaurant.name,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                    .height(145.dp)
+                    .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
                 contentScale = ContentScale.Crop
             )
 
-            // 2. Phần thông tin chữ bên dưới ảnh
             Column(modifier = Modifier.padding(12.dp)) {
-                // Tên quán ăn
                 Text(
                     text = restaurant.name,
                     fontSize = 16.sp,
@@ -54,50 +64,73 @@ fun RestaurantItem(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Mô tả quán ăn
-                Text(
-                    text = restaurant.description,
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                if (restaurant.description.isNotBlank()) {
+                    Text(
+                        text = restaurant.description,
+                        fontSize = 13.sp,
+                        color = Color.Gray,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
 
-                // Hàng hiển thị Đánh giá, Thời gian ship và Khoảng cách
+                // Hàng hiển thị Đánh giá sao, Thời gian dự tính, Khoảng cách thực tế và Phí giao hàng dự kiến
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(top = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
                 ) {
-                    // Điểm đánh giá sao
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Star,
-                            contentDescription = "Rating",
+                            contentDescription = "Đánh giá",
                             tint = Color(0xFFFFB200),
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = " ${restaurant.rating}",
+                            text = " $ratingText",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF191C1D)
                         )
                     }
 
-                    // Thời gian giao hàng (Ví dụ: "25-30 phút")
                     Text(
-                        text = "⏱️ ${restaurant.deliveryTime}", // Sửa lại đúng tên trường trong RestaurantDetail của bạn
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
+                        text = "⏱️ $timeText",
+                        fontSize = 12.sp,
+                        color = Color(0xFF42474E),
+                        maxLines = 1
                     )
 
-                    // Khoảng cách (Ví dụ: "1.2 km")
                     Text(
-                        text = "📍 ${restaurant.distance}",
-                        fontSize = 13.sp,
-                        color = Color.DarkGray
+                        text = "📍 $distanceText",
+                        fontSize = 12.sp,
+                        color = Color(0xFF42474E),
+                        maxLines = 1
                     )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    if (restaurant.distanceKm != null) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFEAF2FA), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "Ship $feeText",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF2159BC),
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
         }

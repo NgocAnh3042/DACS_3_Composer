@@ -6,6 +6,7 @@ function foodhubDatabaseOptions(array $mysql): array {
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => true,
         PDO::ATTR_TIMEOUT => 10,
     ];
     if (!empty($mysql['ssl']['required'])) {
@@ -19,11 +20,12 @@ function foodhubDatabaseOptions(array $mysql): array {
     return $options;
 }
 
-function foodhubConnectDatabase(array $mysql, bool $reuseForRead = false): PDO {
+function foodhubConnectDatabase(array $mysql, bool $reuseForRead = true): PDO {
+    static $verifiedPools = [];
     $host = (string)$mysql['host'];
     $port = (int)$mysql['port'];
     $database = (string)$mysql['database'];
-    $charset = (string)($mysql['charset'] ?? 'utf8mb4');
+    $charset = (string)$mysql['charset'] ?? 'utf8mb4';
     $options = foodhubDatabaseOptions($mysql);
     if (isset($mysql['timezone'])) {
         $timezone = (string)$mysql['timezone'];
@@ -32,21 +34,31 @@ function foodhubConnectDatabase(array $mysql, bool $reuseForRead = false): PDO {
         }
         $options[PDO::MYSQL_ATTR_INIT_COMMAND] = "SET SESSION time_zone = '$timezone'";
     }
+    $poolKey = 'foodhub-pool-'.hash('sha256', serialize([$host, $port, $database, $charset, $options]));
     if ($reuseForRead) {
-        // A separate per-worker pool for GETs. Writes and transactions use fresh connections.
-        $options[PDO::ATTR_PERSISTENT] = 'foodhub-read-'.hash('sha256',serialize($options));
+        $options[PDO::ATTR_PERSISTENT] = $poolKey;
     }
     $dsn = "mysql:host=$host;port=$port;dbname=$database;charset=$charset";
-    $pdo = new PDO($dsn, (string)$mysql['username'], (string)$mysql['password'], $options);
-    if (!empty($mysql['ssl']['required'])) {
+    try {
+        $pdo = new PDO($dsn, (string)$mysql['username'], (string)$mysql['password'], $options);
+    } catch (PDOException $error) {
+        if (!$reuseForRead) throw $error;
+        unset($verifiedPools[$poolKey]);
+        return foodhubConnectDatabase($mysql, false);
+    }
+    if (!empty($mysql['ssl']['required']) && empty($verifiedPools[$poolKey])) {
         try {
             $status = $pdo->query("SHOW SESSION STATUS LIKE 'Ssl_cipher'")->fetch();
         } catch (PDOException $error) {
-            if (!$reuseForRead || !in_array((int)($error->errorInfo[1] ?? 0), [2006,2013], true)) throw $error;
-            return foodhubConnectDatabase($mysql);
+            if (!$reuseForRead || !in_array((int)($error->errorInfo[1] ?? 0), [2006, 2013], true)) throw $error;
+            unset($verifiedPools[$poolKey]);
+            return foodhubConnectDatabase($mysql, false);
         }
         if (empty($status['Value'])) {
             throw new RuntimeException('Database không thiết lập được kết nối TLS.');
+        }
+        if ($reuseForRead) {
+            $verifiedPools[$poolKey] = true;
         }
     }
     return $pdo;

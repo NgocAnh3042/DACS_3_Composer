@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.dacs_3_composer.core.model.RestaurantDetail
 import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.data.repository.RecommendationRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +19,9 @@ data class SearchDishWrapper(
     val restaurantName: String
 )
 
-class SearchViewModel : ViewModel() {
+class SearchViewModel(
+    private val recommendationRepository: RecommendationRepository = RecommendationRepository()
+) : ViewModel() {
 
     private val _restaurantResults = MutableStateFlow<List<RestaurantDetail>>(emptyList())
     val restaurantResults: StateFlow<List<RestaurantDetail>> = _restaurantResults.asStateFlow()
@@ -29,15 +32,26 @@ class SearchViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private var lastRecordedQuery: String? = null
+
     fun searchRestaurantsAndDishes(query: String) {
-        if (query.isBlank()) {
+        val trimmedQuery = query.trim()
+        if (trimmedQuery.isBlank()) {
             _restaurantResults.value = emptyList()
             _dishResults.value = emptyList()
             return
         }
 
         _isLoading.value = true
-        val lowercaseQuery = query.lowercase(Locale.getDefault()).trim()
+        val lowercaseQuery = trimmedQuery.lowercase(Locale.getDefault())
+
+        // Ghi nhận lịch sử tìm kiếm đã xác nhận bất đồng bộ (không chặn kết quả, không lưu trùng do recomposition)
+        if (lastRecordedQuery != lowercaseQuery && trimmedQuery.length >= 2) {
+            lastRecordedQuery = lowercaseQuery
+            viewModelScope.launch {
+                recommendationRepository.recordSearchHistory(trimmedQuery)
+            }
+        }
 
         viewModelScope.launch {
             try {

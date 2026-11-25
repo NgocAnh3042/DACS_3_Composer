@@ -111,7 +111,7 @@ private fun AdminRouteContent(
             // Tab 1: Báo cáo & Thống kê
             composable("foodhub_support") {
                 com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
-                    onBack = { navController.popBackStack() }, onOpenRestaurant = {}, staff = true)
+                    onBack = { navController.popBackStack() }, onOpenDish = {}, staff = true)
             }
             composable(NavigationAdmin.Overview.route) {
                 AdminAnalyticsScreen(

@@ -2,13 +2,15 @@ package com.example.dacs_3_composer.feature.restaurant.menu.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -22,13 +24,32 @@ fun CategoryTabs(
     onCategorySelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(), // Nhận modifier sạch định hình padding từ ngoài
+    DynamicCategoryTabs(
+        selectedCategory = selectedCategory,
+        onCategorySelected = onCategorySelected,
+        categories = listOf("Tất cả", "Món chính", "Khai vị"),
+        modifier = modifier
+    )
+}
+
+@Composable
+fun DynamicCategoryTabs(
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit,
+    categories: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val safeCategories = remember(categories) {
+        categories.map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+    }
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        val categories = listOf("Tất cả", "Món chính", "Khai vị")
-        categories.forEach { category ->
-            val isSelected = selectedCategory == category
+        items(safeCategories, key = { it.lowercase() }) { category ->
+            val isSelected = selectedCategory.equals(category, ignoreCase = true)
             Button(
                 onClick = { onCategorySelected(category) },
                 colors = ButtonDefaults.buttonColors(
@@ -36,12 +57,13 @@ fun CategoryTabs(
                     contentColor = if (isSelected) Color.White else Color(0xFF191C1D)
                 ),
                 shape = RoundedCornerShape(16.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = category,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    maxLines = 1
                 )
             }
         }

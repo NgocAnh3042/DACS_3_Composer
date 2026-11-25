@@ -120,6 +120,7 @@ class RestaurantViewModel : ViewModel() {
                 val store = RestaurantStoreRepository.ensureStore()
                 val updatedDish = dish.copy(imageUrl = imageUrl, restaurantId = store.id)
                 repository.updateDish(updatedDish)
+                _dishes.value = _dishes.value.map { if (it.id == updatedDish.id) updatedDish else it }
 
                 // 🎯 LOG ACTIVITY
                 activityLogRepository.logActivity(
