@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.dacs_3_composer.feature.customer.home.HomeViewModel
 import com.example.dacs_3_composer.feature.customer.home.components.AllDishesScreen
 import androidx.compose.foundation.layout.Box
@@ -86,8 +88,13 @@ fun MainRouteContainerUser(
     ))
 
     val route = navController.currentBackStackEntryAsState().value?.destination?.route
+    var selectedAiDish by remember { mutableStateOf<com.example.dacs_3_composer.core.model.Dish?>(null) }
     Scaffold(
-        bottomBar = { if (route != "meal_advisor" && route != "all_dishes") BottomBarUser(navController = navController) }
+        bottomBar = {
+            if (route != "meal_advisor" && route != "all_dishes" && route?.startsWith("dish_detail/") != true) {
+                BottomBarUser(navController = navController)
+            }
+        }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding)) {
             NavHost(navController = navController, startDestination = "home") {
@@ -103,18 +110,73 @@ fun MainRouteContainerUser(
                     val home = remember(entry) { navController.getBackStackEntry("home") }
                     val model: HomeViewModel = viewModel(viewModelStoreOwner = home)
                     val dishes by model.deliciousDishes.collectAsState()
+                    val categories by model.categories.collectAsState()
+                    val selectedCategory by model.selectedCategory.collectAsState()
                     LaunchedEffect(model) { model.ensureDishes() }
-                    AllDishesScreen(dishes, model.dishesLoading, model.dishesFailed, model::ensureDishes, { navController.popBackStack() }) { dish ->
-                        cartViewModel.currentRestaurantId = dish.restaurantId
-                        cartViewModel.currentRestaurantName = model.restaurantsList.value.find { it.id == dish.restaurantId }?.name.orEmpty()
-                        navController.navigate("restaurant_detail/${dish.restaurantId}")
+                    AllDishesScreen(
+                        dishes = dishes,
+                        loading = model.dishesLoading,
+                        failed = model.dishesFailed,
+                        onRetry = model::ensureDishes,
+                        onBack = { navController.popBackStack() },
+                        categories = categories,
+                        selectedCategory = selectedCategory,
+                        onSelectCategory = model::setCategoryFilter
+                    ) { dish ->
+                        navController.navigate("dish_detail/${dish.id}")
                     }
+                }
+                composable(
+                    route = "dish_detail/{dishId}",
+                    arguments = listOf(navArgument("dishId") { type = NavType.StringType })
+                ) { entry ->
+                    val dishId = entry.arguments?.getString("dishId") ?: ""
+                    val homeEntry = remember(entry) { runCatching { navController.getBackStackEntry("home") }.getOrNull() }
+                    val homeModel: HomeViewModel? = homeEntry?.let { viewModel(viewModelStoreOwner = it) }
+                    val initialDish = remember(dishId, homeModel, selectedAiDish) {
+                        homeModel?.findDishById(dishId) ?: selectedAiDish?.takeIf { it.id == dishId }
+                    }
+                    val initialRestaurant = remember(initialDish, homeModel) {
+                        initialDish?.let { d -> homeModel?.restaurantsList?.value?.firstOrNull { it.id == d.restaurantId } }
+                    }
+                    val relatedDishes = remember(initialDish, homeModel) {
+                        initialDish?.let { d -> homeModel?.dishesOfRestaurant(d.restaurantId, d.id) }.orEmpty()
+                    }
+                    com.example.dacs_3_composer.feature.customer.dish.DishDetailScreen(
+                        dishId = dishId,
+                        initialDish = initialDish,
+                        initialRestaurant = initialRestaurant,
+                        relatedStoreDishes = relatedDishes,
+                        cartViewModel = cartViewModel,
+                        onBackClick = { navController.popBackStack() },
+                        onOpenRestaurant = { restaurantId -> navController.navigate("restaurant_detail/$restaurantId") },
+                        onOpenDish = { nextDishId -> navController.navigate("dish_detail/$nextDishId") },
+                        onViewCartClick = { navController.navigate("cart") }
+                    )
                 }
                 composable("notification") { NotificationScreen() }
                 composable("meal_advisor") {
                     com.example.dacs_3_composer.feature.customer.ai.MealAdvisorScreen(
                         onBack = { navController.popBackStack() },
-                        onOpenRestaurant = { restaurantId -> navController.navigate("restaurant_detail/$restaurantId") }
+                        onOpenDish = { dishId ->
+                            if (dishId.isNotBlank()) {
+                                navController.navigate("dish_detail/$dishId")
+                            }
+                        },
+                        onSelectDish = { dish -> selectedAiDish = dish },
+                        onTrackOrder = { orderId ->
+                            if (orderId.isNotBlank()) {
+                                navController.navigate("order_tracking/$orderId")
+                            }
+                        },
+                        onPayOrder = { orderId, amount ->
+                            if (orderId.isNotBlank()) {
+                                navController.navigate("payment/$orderId/$amount")
+                            }
+                        },
+                        onManageAddresses = {
+                            navController.navigate("manage_address")
+                        }
                     )
                 }
                 

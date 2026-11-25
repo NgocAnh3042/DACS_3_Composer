@@ -34,9 +34,12 @@
     import androidx.compose.ui.unit.sp
     import coil.compose.AsyncImage
     import com.example.dacs_3_composer.core.model.Promotion
+    import com.example.dacs_3_composer.core.model.RestaurantDetail
     import com.example.dacs_3_composer.core.model.UserAddress
     import com.example.dacs_3_composer.core.model.User
     import com.example.dacs_3_composer.feature.customer.profile.AddressFormDialog
+    import com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate
+    import com.example.dacs_3_composer.feature.shared.location.UserLocationCache
     import com.example.dacs_3_composer.data.remote.FoodHubClient
     import com.google.firebase.auth.FirebaseAuth
     import kotlinx.coroutines.launch
@@ -70,11 +73,23 @@
         var currentAddressDetail by remember { mutableStateOf("") }
         var currentLat by remember { mutableStateOf(0.0) }
         var currentLng by remember { mutableStateOf(0.0) }
+        var currentStore by remember { mutableStateOf<RestaurantDetail?>(null) }
 
         var savedAddressesList by remember { mutableStateOf<List<SavedAddress>>(emptyList()) }
         var showMapDialog by remember { mutableStateOf(false) }
         var editingAddressIndex by remember { mutableStateOf<Int?>(null) }
         var addressToEditData by remember { mutableStateOf<SavedAddress?>(null) }
+
+        val activeRestaurantId = cartViewModel.currentRestaurantId.ifBlank {
+            cartItems.firstOrNull()?.dish?.restaurantId.orEmpty()
+        }
+
+        LaunchedEffect(activeRestaurantId) {
+            if (activeRestaurantId.isNotBlank() && activeRestaurantId != "RES_DEFAULT") {
+                runCatching { FoodHubClient.get<RestaurantDetail>("stores", activeRestaurantId) }
+                    .onSuccess { currentStore = it }
+            }
+        }
 
         LaunchedEffect(Unit) {
             cartViewModel.fetchPromotionsFromFirebase()
@@ -93,8 +108,17 @@
         var showAddressBottomSheet by remember { mutableStateOf(false) }
         val addressSheetState = rememberModalBottomSheetState()
 
-        var shippingMethod by remember { mutableStateOf("Nhanh") }
-        val shippingFee = if (shippingMethod == "Nhanh") 25000.0 else 15000.0
+        // Tính khoảng cách thực tế từ quán đến địa chỉ nhận hàng và phí ship theo km:
+        // 1–3 km: 15.000đ; trên 3 km mỗi 1 km tiếp theo cộng thêm 10.000đ (VD: 4 km = 25.000đ)
+        val orderDistanceKm = remember(currentStore, currentLat, currentLng) {
+            DeliveryEstimate.distanceKm(currentStore?.latitude, currentStore?.longitude, currentLat, currentLng)
+        }
+        val orderEtaText = remember(orderDistanceKm, currentStore) {
+            DeliveryEstimate.estimateDeliveryMinutes(orderDistanceKm, currentStore?.deliveryTime)
+        }
+        val shippingFee = remember(orderDistanceKm) {
+            DeliveryEstimate.shippingFee(orderDistanceKm)
+        }
 
         // ✅ PHƯƠNG THỨC THANH TOÁN
         var paymentMethod by remember { mutableStateOf("CASH") } // "CASH" hoặc "ONLINE"
@@ -106,7 +130,7 @@
         val voucherSheetState = rememberModalBottomSheetState()
 
         // Logic tính toán số tiền khuyến mãi dựa trên cấu trúc bảng dữ liệu mới
-        val discount = remember(selectedPromotion, totalDishPrice) {
+        val discount = remember(selectedPromotion, totalDishPrice, shippingFee) {
             if (selectedPromotion != null) {
                 if (totalDishPrice < selectedPromotion!!.minOrderValue) {
                     0.0 // Tổng tiền không đạt mức chi tiêu tối thiểu của mã
@@ -341,9 +365,24 @@
                                         Text("Tổng giá món", color = Color.DarkGray, fontSize = 14.sp)
                                         Text("${String.format("%,.0f", totalDishPrice)} đ", fontSize = 14.sp)
                                     }
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Phí giao hàng", color = Color.DarkGray, fontSize = 14.sp)
-                                        Text("+ ${String.format("%,.0f", shippingFee)} đ", fontSize = 14.sp)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (orderDistanceKm != null) {
+                                                    "Phí giao hàng (${DeliveryEstimate.formatDistance(orderDistanceKm)} · ~$orderEtaText)"
+                                                } else {
+                                                    "Phí giao hàng"
+                                                },
+                                                color = Color.DarkGray,
+                                                fontSize = 14.sp
+                                            )
+                                            Text(
+                                                text = "1–3 km: 15.000đ · Mỗi 1 km tiếp theo: +10.000đ",
+                                                color = Color.Gray,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                        Text("+ ${String.format("%,.0f", shippingFee)} đ", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                     }
                                     if (selectedPromotion != null && discount > 0) {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

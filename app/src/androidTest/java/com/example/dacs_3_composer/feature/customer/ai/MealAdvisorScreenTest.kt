@@ -63,7 +63,7 @@ class MealAdvisorScreenTest {
         compose.onNodeWithText("Xem thực đơn").performClick()
         compose.onNodeWithText("Mình tìm thấy bánh xèo.").assertExists()
         compose.onNodeWithText("Bánh xèo").performClick()
-        compose.runOnIdle { assertEquals("3", opened) }
+        compose.runOnIdle { assertEquals("8", opened) }
         compose.onNodeWithTag("meal_chat_input").performTextInput("Món đầu tiên giá bao nhiêu?")
         compose.onNodeWithContentDescription("Gửi tin nhắn").performClick()
         compose.onNodeWithText("Món đầu tiên giá 60.000đ.").assertExists()

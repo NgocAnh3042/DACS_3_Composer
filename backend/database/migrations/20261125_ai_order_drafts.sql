@@ -1,0 +1,82 @@
+-- FoodHub AI Ordering Agent: Server-Owned Order Drafts, Verifiable Quotes, Idempotency & Scheduled Delivery
+-- Compatible with MySQL 8 / MariaDB 10.4 / TiDB Cloud (food_delivery_app).
+-- Safe additive migration. Does NOT drop or overwrite existing data.
+
+CREATE TABLE IF NOT EXISTS ai_order_drafts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    draft_uid VARCHAR(64) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    conversation_id VARCHAR(64) NOT NULL,
+    store_id BIGINT UNSIGNED NULL,
+    state VARCHAR(40) NOT NULL DEFAULT 'IDLE',
+    items_json MEDIUMTEXT NOT NULL,
+    address_id BIGINT UNSIGNED NULL,
+    voucher_code VARCHAR(64) NULL,
+    voucher_auto TINYINT(1) NOT NULL DEFAULT 1,
+    payment_method VARCHAR(24) NULL,
+    scheduled_for DATETIME NULL,
+    customer_note VARCHAR(500) NULL,
+    reordered_from_order_id BIGINT UNSIGNED NULL,
+    version INT UNSIGNED NOT NULL DEFAULT 1,
+    active_quote_id VARCHAR(64) NULL,
+    submitted_order_id BIGINT UNSIGNED NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_ai_draft_uid (draft_uid),
+    KEY idx_ai_draft_user_conv (user_id, conversation_id, state),
+    KEY idx_ai_draft_expires (expires_at),
+    CONSTRAINT fk_ai_draft_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ai_draft_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL,
+    CONSTRAINT fk_ai_draft_address FOREIGN KEY (address_id) REFERENCES user_addresses(id) ON DELETE SET NULL,
+    CONSTRAINT fk_ai_draft_order FOREIGN KEY (submitted_order_id) REFERENCES orders(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ai_order_quotes (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    quote_uid VARCHAR(64) NOT NULL,
+    draft_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    draft_version INT UNSIGNED NOT NULL,
+    store_id BIGINT UNSIGNED NOT NULL,
+    address_id BIGINT UNSIGNED NOT NULL,
+    voucher_id BIGINT UNSIGNED NULL,
+    voucher_code VARCHAR(64) NULL,
+    payment_method ENUM('cash', 'payos') NOT NULL,
+    scheduled_for DATETIME NULL,
+    subtotal_vnd BIGINT NOT NULL,
+    delivery_fee_vnd BIGINT NOT NULL,
+    discount_vnd BIGINT NOT NULL DEFAULT 0,
+    delivery_discount_vnd BIGINT NOT NULL DEFAULT 0,
+    service_fee_vnd BIGINT NOT NULL DEFAULT 0,
+    tax_vnd BIGINT NOT NULL DEFAULT 0,
+    total_vnd BIGINT NOT NULL,
+    eta_min_minutes INT NULL,
+    eta_max_minutes INT NULL,
+    quote_payload_json MEDIUMTEXT NOT NULL,
+    confirmation_token CHAR(64) NOT NULL,
+    status ENUM('active', 'superseded', 'expired', 'confirmed') NOT NULL DEFAULT 'active',
+    expires_at DATETIME NOT NULL,
+    confirmed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_ai_quote_uid (quote_uid),
+    KEY idx_ai_quote_draft (draft_id, status),
+    CONSTRAINT fk_ai_quote_draft FOREIGN KEY (draft_id) REFERENCES ai_order_drafts(id) ON DELETE CASCADE,
+    CONSTRAINT fk_ai_quote_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ai_order_idempotency (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    idempotency_key VARCHAR(120) NOT NULL,
+    draft_uid VARCHAR(64) NOT NULL,
+    quote_uid VARCHAR(64) NOT NULL,
+    order_id BIGINT UNSIGNED NULL,
+    status ENUM('processing', 'completed', 'failed') NOT NULL DEFAULT 'processing',
+    response_json MEDIUMTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_ai_order_idem (user_id, idempotency_key),
+    KEY idx_ai_idem_quote (quote_uid),
+    CONSTRAINT fk_ai_idem_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

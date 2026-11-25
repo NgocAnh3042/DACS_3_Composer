@@ -6,17 +6,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.dacs_3_composer.core.model.Dish
 import com.example.dacs_3_composer.core.model.Order
 import com.example.dacs_3_composer.core.model.TopDish
 import com.example.dacs_3_composer.core.model.User
 import com.example.dacs_3_composer.data.remote.FoodHubClient
+import com.example.dacs_3_composer.data.repository.RestaurantStoreRepository
+import com.example.dacs_3_composer.feature.admin.analytics.AdminPeriod
+import com.example.dacs_3_composer.feature.admin.analytics.adminRevenueSummary
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class RestaurantHomeViewModel : ViewModel() {
@@ -27,16 +35,24 @@ class RestaurantHomeViewModel : ViewModel() {
     var totalOrdersCount by mutableStateOf("0")
         private set
 
-    // Thêm các biến lưu thông tin nhà hàng
     var restaurantName by mutableStateOf("")
         private set
     var restaurantAvatarUrl by mutableStateOf("")
         private set
 
-    private val _topDishes = MutableStateFlow<List<TopDish>>(emptyList())
-    val topDishes: StateFlow<List<TopDish>> = _topDishes
+    private val _orders = MutableStateFlow<List<Order>>(emptyList())
+    val orders: StateFlow<List<Order>> = _orders.asStateFlow()
 
-    // Mảng lưu tỷ lệ chiều cao biểu đồ cho 7 ngày trong tuần (T2 -> CN) từ 0.0f đến 1.0f
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    var lastUpdated by mutableStateOf("")
+        private set
+
+    private val _topDishes = MutableStateFlow<List<TopDish>>(emptyList())
+    val topDishes: StateFlow<List<TopDish>> = _topDishes.asStateFlow()
+
+    // Mảng lưu tỷ lệ chiều cao biểu đồ cho 7 ngày trong tuần hiện tại (T2 -> CN) từ 0.0f đến 1.0f
     var weeklyChartData by mutableStateOf(listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f))
         private set
 
@@ -50,81 +66,102 @@ class RestaurantHomeViewModel : ViewModel() {
 
     private fun fetchRestaurantInfo() {
         if (currentRestaurantId.isBlank()) return
-        viewModelScope.launch { runCatching { FoodHubClient.get<User>("users", "me") }.onSuccess { restaurantName=it.getDisplayName();restaurantAvatarUrl=it.avatarUrl }.onFailure { Log.e("RestaurantHomeVM", "Lỗi tải hồ sơ MySQL: ${it.message}") } }
+        viewModelScope.launch {
+            runCatching { FoodHubClient.get<User>("users", "me") }
+                .onSuccess {
+                    restaurantName = it.getDisplayName()
+                    restaurantAvatarUrl = it.avatarUrl
+                }
+                .onFailure { Log.e("RestaurantHomeVM", "Lỗi tải hồ sơ MySQL: ${it.message}") }
+        }
+    }
+
+    fun refreshNow() {
+        if (currentRestaurantId.isBlank()) return
+        viewModelScope.launch { loadOnce(showSpinner = true) }
     }
 
     fun fetchDashboardData() {
         if (currentRestaurantId.isBlank()) return
         viewModelScope.launch {
-            while(true) {
-                runCatching { FoodHubClient.list<Order>("orders") }.onSuccess { orders ->
-                    val completedOrders=orders.filter { it.status=="COMPLETED" }
-                    totalRevenue=String.format(Locale("vi","VN"),"%,.0f",completedOrders.sumOf { it.totalPrice })
-                    totalOrdersCount=String.format(Locale("vi","VN"),"%,d",completedOrders.size)
-                    calculateWeeklyChart(completedOrders);calculateTopDishes(completedOrders)
-                }.onFailure { Log.e("RestaurantHomeVM","Lỗi tải thống kê MySQL: ${it.message}") }
+            var first = true
+            while (true) {
+                loadOnce(showSpinner = first)
+                first = false
                 delay(10_000)
             }
         }
     }
 
-    private fun calculateWeeklyChart(orders: List<Order>) {
-        val daysRevenue = mutableMapOf(
-            Calendar.MONDAY to 0.0, Calendar.TUESDAY to 0.0, Calendar.WEDNESDAY to 0.0,
-            Calendar.THURSDAY to 0.0, Calendar.FRIDAY to 0.0, Calendar.SATURDAY to 0.0, Calendar.SUNDAY to 0.0
-        )
-
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-
-        orders.forEach { order ->
-            try {
-                val date = sdf.parse(order.time) ?: java.util.Date()
-                val cal = Calendar.getInstance().apply { time = date }
-                val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
-                if (daysRevenue.containsKey(dayOfWeek)) {
-                    daysRevenue[dayOfWeek] = daysRevenue[dayOfWeek]!! + order.totalPrice
+    private suspend fun loadOnce(showSpinner: Boolean = false) {
+        if (showSpinner) _isLoading.value = true
+        runCatching {
+            coroutineScope {
+                val ordersDeferred = async { FoodHubClient.list<Order>("orders") }
+                val dishesDeferred = async {
+                    runCatching {
+                        val store = RestaurantStoreRepository.ensureStore()
+                        if (restaurantName.isBlank() && store.name.isNotBlank()) restaurantName = store.name
+                        FoodHubClient.list<Dish>("dishes", mapOf("restaurantId" to store.id, "includeUnavailable" to "1"))
+                    }.getOrElse {
+                        runCatching { FoodHubClient.list<Dish>("dishes") }.getOrDefault(emptyList())
+                    }
                 }
-            } catch (e: Exception) {
-                val todayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-                daysRevenue[todayOfWeek] = daysRevenue[todayOfWeek]!! + order.totalPrice
+                ordersDeferred.await() to dishesDeferred.await()
             }
+        }.onSuccess { (fetchedOrders, storeDishes) ->
+            _orders.value = fetchedOrders
+            val completedOrders = fetchedOrders.filter { it.status == "COMPLETED" }
+            totalRevenue = String.format(Locale("vi", "VN"), "%,.0f", completedOrders.sumOf { it.totalPrice })
+            totalOrdersCount = String.format(Locale("vi", "VN"), "%,d", completedOrders.size)
+            calculateWeeklyChart(fetchedOrders)
+            calculateTopDishes(completedOrders, storeDishes)
+            lastUpdated = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+        }.onFailure {
+            Log.e("RestaurantHomeVM", "Lỗi tải thống kê MySQL: ${it.message}")
         }
-
-        val maxRevenue = daysRevenue.values.maxOrNull() ?: 1.0
-        val safeMax = if (maxRevenue == 0.0) 1.0 else maxRevenue
-
-        weeklyChartData = listOf(
-            (daysRevenue[Calendar.MONDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.TUESDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.WEDNESDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.THURSDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.FRIDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.SATURDAY]!! / safeMax).toFloat(),
-            (daysRevenue[Calendar.SUNDAY]!! / safeMax).toFloat()
-        )
+        _isLoading.value = false
     }
 
-    private fun calculateTopDishes(orders: List<Order>) {
-        val dishCountMap = mutableMapOf<String, Int>()
+    private fun calculateWeeklyChart(allOrders: List<Order>) {
+        val summary = adminRevenueSummary(allOrders, LocalDate.now(), AdminPeriod.WEEK)
+        val maxRevenue = summary.days.maxOfOrNull { it.revenue }?.takeIf { it > 0.0 } ?: 1.0
+        weeklyChartData = summary.days.map { (it.revenue / maxRevenue).toFloat() }
+    }
 
-        orders.flatMap { it.items }.forEach { item ->
-            if (item.name.isNotBlank()) {
-                dishCountMap[item.name] = (dishCountMap[item.name] ?: 0) + item.quantity
+    private fun calculateTopDishes(completedOrders: List<Order>, storeDishes: List<Dish>) {
+        val dishById = storeDishes.associateBy { it.id }
+        val dishByName = storeDishes.associateBy { it.name.trim().lowercase(Locale.ROOT) }
+
+        data class DishAgg(var count: Int = 0, var displayName: String = "", var imageUrl: String = "")
+        val aggMap = LinkedHashMap<String, DishAgg>()
+
+        completedOrders.flatMap { it.items }.forEach { item ->
+            val rawName = item.name.trim()
+            if (rawName.isBlank()) return@forEach
+            val key = if (item.dishId.isNotBlank()) "id:${item.dishId}" else "name:${rawName.lowercase(Locale.ROOT)}"
+            val resolvedDish = dishById[item.dishId] ?: dishByName[rawName.lowercase(Locale.ROOT)]
+            val resolvedImage = item.imageUrl.trim()
+                .ifBlank { resolvedDish?.imageUrl?.trim().orEmpty() }
+            val resolvedName = resolvedDish?.name?.takeIf { it.isNotBlank() } ?: rawName
+
+            val current = aggMap.getOrPut(key) { DishAgg(0, resolvedName, resolvedImage) }
+            current.count += item.quantity
+            if (current.imageUrl.isBlank() && resolvedImage.isNotBlank()) {
+                current.imageUrl = resolvedImage
             }
         }
 
-        val sortedDishes = dishCountMap.entries
-            .sortedByDescending { it.value }
-            .take(3)
+        _topDishes.value = aggMap.values
+            .sortedByDescending { it.count }
+            .take(5)
             .mapIndexed { index, entry ->
                 TopDish(
                     rank = index + 1,
-                    dishName = entry.key,
-                    ordersCount = entry.value,
-                    imageUrl = ""
+                    dishName = entry.displayName,
+                    ordersCount = entry.count,
+                    imageUrl = entry.imageUrl
                 )
             }
-
-        _topDishes.value = sortedDishes
     }
 }

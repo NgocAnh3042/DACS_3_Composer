@@ -33,7 +33,8 @@ internal class FirebaseAuthInterceptor(private val tokenProvider: () -> String?)
             if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
             header("Accept", "application/json")
         }.build()
-        return if (request.url.encodedPath.endsWith("/ai/meal-advisor")) {
+        val path = request.url.encodedPath
+        return if (path.endsWith("/ai/meal-advisor") || path.contains("/ai/order-drafts")) {
             chain.withReadTimeout(60, TimeUnit.SECONDS).proceed(request)
         } else {
             chain.proceed(request)

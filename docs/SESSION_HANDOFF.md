@@ -12,12 +12,317 @@ Cập nhật **25/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trướ
 - Local URL cần path `/food-delivery-api/api/` để API parser nhận đúng route. Đã thêm lại `backend/router.php` vì PHP built-in server không đọc `.htaccess`.
 - Kiểm tra localhost `/food-delivery-api/api/` trả HTTP 200 và `database=connected` trên TiDB Cloud. Chưa thử đăng nhập Google hoặc đồng bộ hồ sơ thật.
 - Tunnel chưa online trong môi trường công cụ: ngrok báo không kết nối được `connect.ngrok-agent.com:443` vì kết nối proxy `127.0.0.1:9` bị từ chối; local ngrok API không có tunnel. Cần khởi động ngrok trong PowerShell có kết nối Internet.
+## Sửa lỗi Crash `NoSuchMethodError: RevenueCard(...)` khi chuyển sang Tài khoản Restaurant — 25/11/2026
 
+- **Nguyên nhân thực tế từ Crash Logcat (`11:11:34.913`)**:
+  - `java.lang.NoSuchMethodError: No static method RevenueCard(Ljava/lang/String;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V in class ...RevenueCardKt (...base.apk!classes15.dex)` tại `RestaurantScreen.kt:41`.
+  - Do `versionCode` trong `app/build.gradle.kts` vẫn giữ `1`, trình triển khai nhanh của Android Studio trên thiết bị Samsung (`SM-A235F`, Android 12) giữ nguyên thư mục cài đặt cũ `/data/app/~~GVpCUFoqFY6Gia8pBfNuLw==/base.apk` và chỉ đẩy một phần `.overlay` DEX (`RestaurantScreenKt` được cập nhật chữ ký mới có `onClick`, trong khi `classes15.dex` vẫn giữ `RevenueCard` chữ ký cũ).
+- **Khắc phục triệt để**:
+  - `app/build.gradle.kts`: Tăng `versionCode = 2` (`versionName = "1.1"`) để ép Android `PackageManager` xóa sạch bộ đệm `code_cache/.overlay/` cũ và cài mới hoàn toàn toàn bộ `.dex` ngay khi nhấn **Run ▶**.
+  - `RevenueCard.kt`, `WeeklyRevenueCard.kt`, `CategoryTabs.kt`, `RestaurantScreen.kt`, `RestaurantMenuScreen.kt`: Giữ nguyên các hàm chữ ký gốc (`RevenueCard`, `WeeklyRevenueCard`, `CategoryTabs`) tương thích nhị phân 100%, tách các hàm mở rộng thành `InteractiveRevenueCard`, `InteractiveWeeklyRevenueCard`, `DynamicCategoryTabs`, đồng thời lọc trùng khóa không phân biệt hoa/thường cho `LazyRow` danh mục thực đơn.
+  - Đã chạy `.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL**.
+
+## Nâng cấp AI Ordering Agent v2 (Đặt lại đơn cũ 1 chạm • Upsell Mở Voucher • Hẹn giờ giao) & Đồng bộ Live Alwaysdata/TiDB — 25/11/2026
+
+- **Khắc phục triệt để lỗi chưa đặt được món qua AI trên điện thoại**:
+  - Nguyên nhân: Bản APK mới trên máy gửi `"Chọn đặt 1x Mâm khai vị"` lên `https://chinh.alwaysdata.net/food-delivery-api/api/ai/meal-advisor`, nhưng trước đó Alwaysdata chưa được đồng bộ bộ mã Ordering Agent & bảng nháp trên TiDB Cloud.
+  - Đã chạy migration cộng thêm `backend/database/migrations/20261125_ai_order_drafts.sql` trên TiDB Cloud (`food_delivery_app`), bổ sung `INSERT IGNORE` 3 voucher sàn (`FHGIAM15K`, `FHDEAL30K`, `FHFREESHIP` — tổng 8 voucher active), và đồng bộ toàn bộ 20 tệp PHP lên Alwaysdata (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261125-033019`).
+  - Bổ sung nhận diện cả văn bản thuần `"Chọn đặt 1x ..."` lẫn `orderingAction` trong `AiOrderingOrchestrator.php`. Kiểm tra smoke live trên Alwaysdata với câu `"Chọn đặt 1x Mâm khai vị"` trả về `kind = ordering_quote`, tự tối ưu mã `FHDEAL30K (-30.000đ)` và dọn sạch bản nháp thử nghiệm ngay sau khi kiểm tra (`0` đơn hàng giả tạo trên production).
+- **Bổ sung 3 chức năng nâng cao cho AI Ordering Agent (End-to-End Backend + DB + Android Compose)**:
+  1. **Đặt lại đơn cũ 1 chạm (`One-Tap Reorder`)**:
+     - `AiOrderDraftService::reorderPastOrder()` & `AiOrderingOrchestrator` (`reorder_last` + câu tự nhiên *"Đặt lại y hệt đơn hôm qua"*, *"Đặt lại đơn cũ"*): nạp món + tùy chọn từ đơn hoàn tất gần nhất (`reordered_from_order_id`), kiểm tra trạng thái mở cửa quán, tự lược món hết hàng và **đối chiếu giá niêm yết hiện hành** so với giá lịch sử (báo rõ chênh lệch `giá cũ → giá mới`).
+     - Giao diện Android: Chip 1 chạm **`Đặt lại đơn cũ`** ngay đầu màn hình `MealAdvisorScreen.kt` + nhãn `Đặt lại đơn cũ · Giá hiện hành` trên `CheckoutSummaryCard`.
+  2. **Gợi ý món kèm có sự đồng ý (`Consent-Based Smart Voucher Upselling`)**:
+     - `AiOrderDraftService::findSmartUpsell()` & `acceptUpsell()`: khi tổng món đang thiếu `1.000đ–25.000đ` (đặc biệt `5.000đ–10.000đ`) để chạm `min_order_amount` của voucher giảm sâu cùng quán/toàn sàn, tự động tìm món phụ/nước giải khát cùng quán không vướng tùy chọn bắt buộc sao cho tổng thanh toán sau giảm **rẻ hơn cả khi chưa thêm** (`isStrictlyCheaper = true`). Tuyệt đối **không tự thêm vào giỏ** khi chưa có sự đồng ý; hiển thị thẻ `ai_upsell_suggestion_card` kèm nút 1 chạm **`+ Thêm <Món> & Áp mã <CODE>`** (hoặc nhắn *"Ừ thêm món kèm đó đi"*).
+  3. **Hẹn giờ giao hàng trước (`Scheduled Delivery — scheduled_for`)**:
+     - Thêm cột `scheduled_for DATETIME NULL` vào `ai_order_drafts` và `ai_order_quotes`; kiểm tra chặt chẽ giờ mở cửa thực tế của nhà hàng (`stores.open_time` .. `stores.close_time`) và thời gian chuẩn bị tối thiểu (`>= 20 phút`, `<= 48 giờ`).
+     - Hỗ trợ cả ngôn ngữ tự nhiên (*"giao lúc 18h30 tối nay"*, *"hẹn giao 8h30 sáng mai"*, *"đổi lại giao ngay"*) lẫn dải `FilterChip` chọn khung giờ hợp lệ ngay trên `CheckoutSummaryCard`; khi xác nhận tạo đơn, lưu `[Hẹn giao: HH:MM DD/MM/YYYY]` vào `orders.customer_note` và `order_status_logs.note` để Nhà hàng & Shipper thấy ngay.
+- **Kiểm thử đã xác nhận**:
+  - `backend/tests/foodhub_ordering_agent_150_test.php`: mở rộng lên **175/175 PASS (100%)** (thêm Group H 25 kịch bản cho Reorder, Smart Upsell, Scheduled Delivery & `"Chọn đặt 1x ..."`).
+  - Android Gradle `.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL** (cần nhấn **Run ▶** cài lại bản `app-debug.apk` mới lên điện thoại để hiển thị 3 cụm UI mới trên app; phần đặt món AI phía server Alwaysdata đã hoạt động ngay).
+
+## Nâng cấp FoodHub AI thành AI Food Ordering Agent (Đặt món qua Hội thoại) — 25/11/2026
+
+- **Database Migration cộng thêm** (`backend/database/migrations/20261125_ai_order_drafts.sql`):
+  - Khai báo 3 bảng `ai_order_drafts`, `ai_order_quotes`, `ai_order_idempotency` (chưa tự ý chạy trên TiDB Cloud production theo đúng quy tắc không sửa DB production khi chưa được phép).
+- **Backend Ordering Engine & REST Endpoints**:
+  - Tạo mới `backend/ai/AiOrderDraftService.php`: State machine đặt món đầy đủ (`IDLE` → `AWAITING_FINAL_CONFIRMATION` → `ORDER_CREATED` / `PAYMENT_PENDING` + nhánh ngoại lệ), kiểm tra quyền `customer`, ràng buộc 1 nhà hàng/đơn, kiểm chứng tùy chọn món (`option_groups`/`options`), tối ưu voucher theo mức giảm VND thực tế, tính phí ship theo km + ETA có cơ sở, sinh báo giá VND nguyên kèm `confirmationToken` (`TTL = 10 phút`) và tạo đơn an toàn trong giao dịch SQL chống trùng đơn (`idempotencyKey` + `SELECT ... FOR UPDATE`).
+  - Tạo mới `backend/ai/AiOrderingOrchestrator.php` & `backend/ai/ai-order-draft-route.php`; mở rộng `FoodHubSystemPrompt.php` (`v3.0.0`), `meal-advisor-route.php` và `backend/api/index.php` (`/api/ai/order-drafts`).
+- **Android Jetpack Compose AI Ordering UI**:
+  - Mở rộng `MealAdvisorRepository.kt`, `MealAdvisorViewModel.kt`, `MealAdvisorScreen.kt`, `MainRouteContainerUser.kt`, `FirebaseAuthInterceptor.kt`: nút **Chọn đặt** trên thẻ món, xử lý xung đột khác cửa hàng (`StoreConflictCard`), bảng **Tóm tắt đơn đặt món (`CheckoutSummaryCard`)** chỉnh số lượng/địa chỉ/voucher tối ưu/COD-PayOS, nút **`Xác nhận đặt hàng — Xđ`** kèm khóa `idempotencyKey` cố định mỗi báo giá, và thẻ hoàn tất **`OrderCreatedSuccessCard`** điều hướng thẳng sang Theo dõi đơn / Thanh toán QR PayOS.
+- **Kiểm thử đã xác nhận**:
+  - `backend/tests/foodhub_ordering_agent_150_test.php`: **150/150 PASS (100%)** trên đủ 7 nhóm A–G.
+  - `backend/tests/foodhub_ordering_http_integration_test.php`: **8/8 PASS (100%)** qua máy chủ HTTP PHP local.
+  - Toàn bộ bộ test hồi quy PHP (`foodhub_conversation_120_test.php` 120/120, `foodhub_phase5_quality_120_test.php` 120/120, `foodhub_meal_quality_test.php` 82/82, `foodhub_vietnamese_context_test.php` 85/85, `recommendation_system_test.php` 31/31): **100% PASS**.
+  - Android Gradle `:app:compileDebugKotlin`, `:app:compileDebugAndroidTestKotlin`, `:app:testDebugUnitTest` (gồm `OrderingAgentViewModelTest`, `MealAdvisorScreenTest`, `HomeFeedCompositionTest`, `DeliveryEstimateTest`): **BUILD SUCCESSFUL**.
+  - **Chưa đồng bộ lên Alwaysdata / TiDB production**: Cần sự cho phép của người dùng trước khi chạy migration `20261125_ai_order_drafts.sql` và đồng bộ tệp PHP lên Alwaysdata.
+
+## Sửa lỗi Crash `NoSuchMethodError: cacheTtlMs$default` khi mở Ứng dụng — 25/11/2026
+
+- **Nguyên nhân**: Các hàm `suspend inline fun <reified T> list/get/create/update` trong `FoodHubApi.kt` trước đó gọi trực tiếp các hàm `@PublishedApi internal` (`cacheTtlMs` có tham số mặc định `filters = emptyMap()`), khiến trình biên dịch nhúng lời gọi cầu nối tĩnh `FoodHubClient.cacheTtlMs$default(...)` vào từng ViewModel và gây lỗi `NoSuchMethodError` khi cài đặt tăng dần / Apply Changes trên thiết bị thật (`SM-A235F`).
+- **Khắc phục**:
+  - `app/src/main/java/com/example/dacs_3_composer/data/remote/FoodHubApi.kt`: Loại bỏ hoàn toàn `@PublishedApi internal` và chuyển toàn bộ logic bộ nhớ đệm + mạng vào các phương thức chuẩn không `inline` (`listTyped`, `getTyped`, `createObject`, `updateObject`); giữ `inline fun <reified T>` làm lớp bọc mỏng 1 dòng truyền `T::class.java`, tương thích nhị phân 100% với mọi bản build tăng dần.
+  - Chạy `.\gradlew.bat clean :app:assembleDebug :app:testDebugUnitTest`: **BUILD SUCCESSFUL** (45/45 tasks), sinh bản `app-debug.apk` mới hoàn toàn không còn `.dex` cũ.
+
+## Phát triển Danh mục Món ăn Động & Phân loại Trực tiếp trên Trang chủ Khách hàng — 24/11/2026
+
+- **Chuyển đổi Danh mục món ăn trên Trang chủ từ 5 ảnh tĩnh cố định sang hệ thống phân loại động theo dữ liệu thực tế TiDB**:
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/home/HomeViewModel.kt`: Bổ sung `HomeCategory(name, dishCount, imageUrl)`, `categories: StateFlow`, `selectedCategory: StateFlow`, `toggleCategory()`, `setCategoryFilter()` cùng các hàm thuần `buildCategories()`, `filterDishesByCategory()`, `filterRestaurantsByCategory()` — tự động tổng hợp toàn bộ 17+ danh mục món ăn đang mở bán từ TiDB (gộp không phân biệt hoa/thường, lấy ảnh thật đại diện trên Cloudinary và sắp xếp theo số lượng món giảm dần).
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/home/components/CategorySection.kt`: Nâng cấp giao diện tông trắng/xanh `#2159BC` gồm thẻ **"Tất cả"** + hàng cuộn ngang toàn bộ danh mục động kèm số lượng món (`"40 món"`, `"15 món"`, `"6 món"`...) và trạng thái viền xanh khi đang chọn; bấm **"Xem tất cả"** mở `AllCategoriesBottomSheet` dạng lưới 3 cột hiển thị trực quan tất cả nhóm món kèm nút mở nhanh toàn bộ thực đơn.
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/home/HomeScreen.kt`: Khi chạm vào một danh mục, lọc tức thì (`0 ms`) cả khu vực món ăn (**`"Danh mục: <Tên> (Có X món ăn...)"`** kèm chip **"Bỏ lọc"**) lẫn danh sách cửa hàng bên dưới (**`"Quán có món <Tên> (Y)"`**); chạm lại danh mục đang chọn hoặc **"Tất cả"** sẽ khôi phục toàn bộ bảng tin cá nhân hóa.
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/home/components/DeliciousDishSection.kt` (`AllDishesScreen`) & `MainRouteContainerUser.kt`: Đồng bộ danh mục đang chọn sang màn hình **Tất cả món ăn**, bổ sung thanh tìm kiếm nhanh trong danh mục và dải `FilterChip` chuyển đổi linh hoạt giữa các nhóm món.
+- **Kiểm thử đã xác nhận**:
+  - Bổ sung unit test cho `buildCategories`, `filterDishesByCategory` và `filterRestaurantsByCategory` trong `HomeFeedCompositionTest.kt`.
+  - Android Gradle `:app:compileDebugKotlin` & `:app:testDebugUnitTest`: **BUILD SUCCESSFUL** (cần build/cài APK mới lên điện thoại để trải nghiệm giao diện Danh mục món ăn động mới).
+
+## Mở rộng Đợt 2: Thêm 5 Nhà hàng + 50 Món ăn (TiDB/Cloudinary) & Nâng cấp 300 Mẫu Hội thoại Huấn luyện AI — 24/11/2026
+
+- **Thêm 5 nhà hàng đặc trưng mới + 50 món ăn mới trên TiDB Cloud (`food_delivery_app`) & Cloudinary (`dhscw17vq`)**:
+  1. `Cơm Tấm Sườn Nướng Sài Gòn Xưa` (`store_id = 90002`, Hải Châu, Đà Nẵng) — 10 món (`Cơm tấm`, `Món chính`, `Món phụ`, `Khai vị`, `Nước giải khát`, `Tráng miệng`).
+  2. `Bếp Hàn Seoul — Tokbokki & Gà Rán` (`store_id = 90003`, Sơn Trà, Đà Nẵng) — 10 món (`Món Hàn`, `Món chính`, `Khai vị`, `Ăn vặt`, `Món phụ`, `Nước giải khát`).
+  3. `Hải Sản & Ốc Ngon Biển Mỹ Khê` (`store_id = 90004`, Sơn Trà, Đà Nẵng) — 10 món (`Hải sản`, `Món chính`, `Đồ nướng`, `Món phụ`, `Nước giải khát`).
+  4. `Góc Nhật Bản — Sushi, Ramen & Bento` (`store_id = 90005`, Hải Châu, Đà Nẵng) — 10 món (`Món Nhật`, `Món chính`, `Ăn vặt`, `Khai vị`, `Món phụ`, `Nước giải khát`, `Tráng miệng`).
+  5. `Tiệm Chè, Sinh Tố & Trái Cây Nhiệt Đới` (`store_id = 90006`, Thanh Khê, Đà Nẵng) — 10 món (`Chè`, `Sinh tố`, `Tráng miệng`, `Nước giải khát`, `Ăn vặt`).
+  - Đã tải **60 ảnh thật** (10 ảnh bìa/logo quán + 50 ảnh món ăn) lên Cloudinary (`foodhub_catalog/stores`, `foodhub_catalog/dishes`) và tự động xóa cache danh mục trên Alwaysdata (`foodhubInvalidateJsonCache('stores', 'dishes', 'categories')`).
+  - **Tổng quy mô thực đơn mở bán trên TiDB Cloud**: **15 nhà hàng đang mở**, **129 món ăn** thuộc **17 danh mục** (`Món chính` 40, `Nước giải khát` 15, `Ăn vặt` 11, `Tráng miệng` 10, `Khai vị` 10, `Hải sản` 6, `Món phụ` 6, `Món chay` 5, `Món Hàn` 4, `Cơm tấm` 4, `Món Nhật` 4, `Sinh tố` 3, `Chè` 3, `Trà sữa` 3, `Cà phê` 2, `Đồ nướng` 2, `Bánh ngọt` 1).
+- **Bổ sung thêm 100 mẫu hội thoại JSONL mới (`docs/AI_TRAINING_DATASET.jsonl`, dòng `201–300`, nâng tổng lên `300` mẫu)**:
+  - Bao phủ 10 nhóm ngữ cảnh chuyên sâu (0 dòng trùng lặp, 0 câu mở đầu trùng lặp): 5 nhóm tư vấn món & ghép combo 1 chính + 1 phụ theo đúng thực đơn/giá của 5 nhà hàng mới (`Cơm Tấm Sài Gòn Xưa`, `Bếp Hàn Seoul`, `Hải Sản Biển Mỹ Khê`, `Góc Nhật Bản`, `Tiệm Chè & Sinh Tố Nhiệt Đới`), cộng 5 nhóm so sánh liên quán toàn sàn, phương ngữ Bắc–Trung–Nam/teencode đa lượt, xử lý sự cố thực tế, bài toán phí ship theo km/voucher và quản trị đa vai trò/bảo mật SQL/độ tuổi.
+  - Mở rộng `backend/ai/MenuKnowledge.php` & `backend/ai/FoodHubSupport.php` hỗ trợ cầu nối danh mục động, từ khóa tìm kiếm và phân loại món chính/phụ cho 6 danh mục mới (`Cơm tấm`, `Món Hàn`, `Hải sản`, `Món Nhật`, `Chè`, `Sinh tố`) — bản sửa PHP AI đang ở repo local, sẵn sàng đồng bộ lên Alwaysdata khi người dùng yêu cầu.
+- **Kiểm thử đã xác nhận**:
+  - `backend/tests/foodhub_vietnamese_context_test.php`: **85/85 PASS** (xác minh đủ **300 mẫu JSONL hợp lệ**, 0 trùng lặp, tuân thủ hàng rào an toàn & phân loại đúng danh mục mới).
+  - `backend/tests/foodhub_meal_quality_test.php` (**82/82 PASS**), `backend/tests/menu_knowledge_test.php` (**27/27 PASS**), `php -l` sạch 100%.
+
+## Mở rộng 200 Mẫu Hội thoại Huấn luyện AI & Mở Trang Profile Món ăn từ Gợi ý AI — 24/11/2026
+
+- **Bổ sung thêm 70 mẫu hội thoại JSONL mới (`docs/AI_TRAINING_DATASET.jsonl`, dòng `131–200`, tổng `200` mẫu)**:
+  - Bao phủ 7 nhóm chuyên sâu không trùng lặp: (1) Trải nghiệm mở trang Profile món ăn từ gợi ý AI, giỏ hàng 1 quán/đổi nhà hàng, cá nhân hóa lịch sử tìm kiếm & giờ mở cửa quán; (2) Ghép combo theo thời tiết, tập gym, ăn xế, chay ít dầu mỡ, trẻ em không ăn cay & ngân sách gồm phí ship; (3) Ngôn ngữ đời thường nâng cao (ẩn ý rát họng/chạy deadline/ngày rằm, không dấu, câu hỏi gộp 2 ý, tự đổi ngân sách giữa chừng); (4) Thanh toán PayOS, COD, điều kiện áp mã giảm giá & đối soát minh bạch; (5) Theo dõi trạng thái đơn, bản đồ tài xế, đặt nhầm địa chỉ & xử lý sự cố thực tế; (6) Dị ứng tôm cua/lactose/đậu phộng, chế độ thuần chay (vegan), kiêng heo/bò & ranh giới y khoa; (7) Nghiệp vụ Nhà hàng/Shipper/Admin & chống Prompt Injection / bảo vệ dữ liệu riêng tư.
+  - Bổ sung thêm 3 chủ đề FAQ runtime trong `backend/ai/FoodHubKnowledgeBase.php` & `backend/ai/FoodHubSupport.php` (`dish_profile_navigation`, `seller_revenue_and_categories`, `driver_vehicle_breakdown_or_incident`) và cập nhật `how_to_order` (chưa đồng bộ bản sửa 2 file PHP này lên Alwaysdata vì người dùng chưa yêu cầu).
+- **Nhấn thẻ món ăn do AI gợi ý mở trực tiếp Trang Profile Món ăn (`DishDetailScreen`)**:
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/ai/MealAdvisorScreen.kt`: Đổi callback `onOpenRestaurant` sang `onOpenDish(item.dish.id)` kèm `onSelectDish(item.dish)` trong `DishCard` để mở trang Chi tiết món ăn thay vì trang thực đơn nhà hàng.
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/MainRouteContainerUser.kt`: Điều hướng `meal_advisor` sang `dish_detail/{dishId}` kèm truyền sẵn `selectedAiDish` vào `initialDish` để hiển thị tức thì ảnh, giá, mô tả và nút Thêm vào giỏ mà không phải chờ tải lại; cập nhật tương ứng ở `MainRouteContainerAdmin.kt`, `MainRouteContainerShipper.kt`, `MainRouteContainerRestaurant.kt` và test UI `MealAdvisorScreenTest.kt`.
+- **Kiểm thử đã xác nhận**:
+  - PHP: `backend/tests/foodhub_vietnamese_context_test.php` (**79/79 PASS**, xác minh đủ 200 mẫu JSONL hợp lệ, 0 dòng trùng lặp, tuân thủ hàng rào an toàn), `foodhub_conversation_120_test.php` (**120/120 PASS**), `foodhub_phase5_quality_120_test.php` (**120/120 PASS**), `foodhub_meal_quality_test.php` (**82/82 PASS**), `foodhub_support_test.php` (**PASS**).
+  - Android Gradle `:app:compileDebugKotlin`, `:app:compileDebugAndroidTestKotlin`, `:app:testDebugUnitTest`: **BUILD SUCCESSFUL** (cần build/cài APK mới lên điện thoại để trải nghiệm thao tác chạm mở trang Profile món từ khung gợi ý AI).
+
+## Tối ưu Tốc độ Truyền Dữ liệu DB/API & Huấn luyện AI Đọc hiểu Hội thoại Tự nhiên — 24/11/2026
+
+- **Nguyên nhân độ trễ 3–4 giây trước đây** (đã đo thực tế trên Alwaysdata Paris ↔ TiDB Cloud Singapore `ap-southeast-1`):
+  - Mỗi kết nối lạnh tốn **`1.301,7 ms`** (gồm bắt tay TLS + `SET SESSION time_zone` + truy vấn thừa `SHOW SESSION STATUS LIKE 'Ssl_cipher'` `~160 ms` trên mọi request) cộng thêm `160 ms` tra `account($uid)` và `170–195 ms` truy vấn chính; khi mở Trang chủ bắn 6 request song song tạo tranh chấp kết nối lên đến 3–4s, cộng thêm lỗi N+1 truy vấn ở `GET /api/conversations`.
+- **Tối ưu hóa tốc độ Backend & Android**:
+  - `backend/database/connection.php`: Bật `PDO::ATTR_PERSISTENT` dùng lại kết nối ấm kèm tự kết nối lại khi hết hạn, bật `PDO::ATTR_EMULATE_PREPARES => true` (giảm 1 vòng RTT mỗi câu SQL) và chỉ kiểm tra `Ssl_cipher` 1 lần đầu trên mỗi worker (vẫn xác minh nghiêm ngặt CA + chứng chỉ TLS).
+  - `backend/runtime.php` & `backend/api/index.php`: Nén phản hồi Gzip (`ob_gzhandler`), khởi tạo `$pdo` dạng **lazy** (chỉ mở kết nối TiDB khi cache miss hoặc ghi dữ liệu), bổ sung cache JSON riêng tư ngoài web root cho `account($uid)` (120s), `stores` (90s), `dishes` (90s), `categories` (90s), `vouchers` (60s), `addresses` (120s) kèm **cơ chế tự xóa cache tức thì (write-through invalidation)** ngay khi thêm/sửa/xóa món, quán, địa chỉ, voucher hoặc đặt đơn; gộp truy vấn `GET /api/conversations` từ `4×N+1` xuống **3 câu bulk `IN (...)`**.
+  - `app/src/main/java/com/example/dacs_3_composer/data/remote/FoodHubApi.kt`: Bổ sung bộ nhớ đệm Firebase ID Token trên RAM (tránh nghẽn luồng `Tasks.await` khi gọi song song), `OkHttp ConnectionPool(8, 5m)` giữ ấm kết nối HTTP/2, và bộ nhớ đệm phản hồi ngắn hạn (60s) tự hủy ngay khi `create`/`update`/`delete` để chuyển tab hiển thị tức thì `0 ms`.
+- **Nâng cấp AI đọc hiểu đoạn chat đời thường & đa lượt**:
+  - `backend/ai/FoodHubKnowledgeBase.php`: Mở rộng viết tắt đời thường (`k` → `không` nhưng giữ nguyên `4 km`, `nc` → `nước`, `cf/cafe` → `cà phê`, `ts` → `trà sữa`, `bh/bjo` → `bây giờ`), nhận diện ngữ cảnh ẩn ý (`bụng kêu`, `tụt huyết áp`, `buồn miệng`, `khát nước`, `khô cổ`) và thêm 2 chủ đề mới (`change_or_modify_items` khi bấm nhầm món, `payos_pending_sync` khi chuyển khoản xong vẫn báo chờ thanh toán).
+  - `backend/ai/ConversationContext.php`, `FoodHubSupport.php`, `MealChat.php`, `FoodHubSystemPrompt.php`, `MealAdvisor.php`: Thêm `analyzeDiscourse()` nhận diện hành động hội thoại (`self_correction` *"ý mình là..."*, `hesitation_or_comparison` *"phân vân..."*, `natural_confirmation` *"ok gửi đi"*, `follow_up_reference`), chấp nhận xác nhận tạo phiếu hỗ trợ tự nhiên (*"ok gửi đi"*, *"ok tạo phiếu hỗ trợ giúp mình nha"*) và mở rộng tham chiếu món ẩn ý (*"cái thứ 2 giá sao zậy"*, *"ly đầu tiên bán ở quán nào z"*).
+  - `docs/AI_TRAINING_DATASET.jsonl`: Bổ sung thêm 12 hội thoại đa lượt thực tế và mở rộng thêm **50 mẫu hội thoại JSONL mới** theo 6 nhóm ngữ cảnh (Combo 1 chính + 1 phụ cùng quán trên 5 quán mới, Danh mục động TiDB, Ngôn ngữ đời thường/viết tắt/phương ngữ Bắc–Trung–Nam/tự đính chính, Khoảng cách & phí ship lũy tiến theo km, Trí tuệ cảm xúc & xử lý sự cố 2 bước/dị ứng, Hỗ trợ đa vai trò Restaurant/Shipper/Admin & bảo mật OTP/đơn người khác) → tổng **130 mẫu JSONL hợp lệ**, không trùng lặp.
+- **Kiểm thử & Kết quả đo thực tế**:
+  - `backend/tests/foodhub_vietnamese_context_test.php`: **76/76 PASS** (xác minh toàn bộ 130 mẫu JSONL hợp lệ chuẩn OpenAI/Groq chat format, không trùng lặp, không tự nhận là người thật, không bịa hành động); toàn bộ **12/12 bộ test PHP** & `php -l` đạt **100%**.
+  - Android Gradle `:app:compileDebugKotlin` & `:app:testDebugUnitTest`: **BUILD SUCCESSFUL**.
+  - ✅ **Đã đồng bộ toàn bộ 17 file lên Alwaysdata** (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261124-034507`).
+  - **Số liệu tốc độ đo thực tế trên Alwaysdata**: đọc 79 món + 10 quán từ cache server giảm từ **`~1.660 ms` xuống `7,51 ms`** (`0` vòng RTT sang Singapore), kết nối ấm TiDB giảm từ **`1.301,7 ms` xuống `157,99 ms`**, dung lượng JSON 79 món nén Gzip giảm **`87,5%`** (`71.681 bytes` → `8.943 bytes`).
+
+## Khoảng cách Thực tế, Ước tính Thời gian Giao & Quy luật Tính phí Ship theo Km — 24/11/2026
+
+- **Tính khoảng cách thực tế, thời gian giao dự kiến & hiển thị trên UI Khách hàng**:
+  - Tạo mới `app/src/main/java/com/example/dacs_3_composer/feature/shared/location/DeliveryEstimate.kt`: Tính khoảng cách Haversine làm tròn 1 chữ số thập phân từ tọa độ quán `(latitude, longitude)` tới vị trí thực tế của người dùng (`rememberUserCoordinates`: ưu tiên GPS thiết bị tại Việt Nam, dự phòng sang địa chỉ giao hàng mặc định đã lưu để tránh lỗi GPS mặc định ở Mỹ trên máy ảo), ước tính thời gian giao (`prepMinutes + ceil(km × 2.5) + 3 phút`) và phí ship theo km.
+  - `HomeScreen.kt`, `SearchScreen.kt`, `RestaurantItem.kt`, `RestaurantDetailScreen.kt`, `RestaurantInfoUserCard.kt`, `RestaurantDetail.kt`: Hiển thị đầy đủ **⭐ Đánh giá · ⏱️ Thời gian giao dự kiến · 📍 Khoảng cách (km) · 🚚 Ship dự kiến** ngay dưới banner và thông tin quán; sắp xếp mục **"Quán ngon gợi ý"** ưu tiên quán gần người dùng trước.
+- **Quy luật tính tiền ship theo số km (đồng nhất Android + Backend PHP + AI CSKH)**:
+  - Quy luật: **`0 – 3.0 km`: `15.000đ`**; **trên `3.0 km` cứ tăng mỗi `1 km` (làm tròn lên theo bậc km) cộng thêm `10.000đ`** (`3.1–4.0 km` = `25.000đ`, `4.1–5.0 km` = `35.000đ`, ...).
+  - `CartScreen.kt`: Tự động tính lại khoảng cách, thời gian giao và phí ship khi khách đổi địa chỉ nhận hàng, hiển thị rõ công thức ngay tại dòng Phí giao hàng và cập nhật đúng mức giảm cho mã `free_shipping`.
+  - `backend/api/index.php`: Bổ sung `foodhubDistanceKm()`, `foodhubShippingFee()`, `foodhubDeliveryEstimate()`; áp dụng trực tiếp vào `POST /api/orders` (`orders.delivery_fee`, `orders.total_amount`, `deliveries.delivery_fee` thu nhập shipper, voucher `free_shipping`, PayOS) và hỗ trợ `?lat=&lng=` trên `GET /api/stores`.
+  - `backend/ai/FoodHubSupport.php`: Cập nhật câu trả lời phí giao hàng của FoodHub AI theo đúng quy luật km mới.
+  - Tạo mới unit test `app/src/test/java/com/example/dacs_3_composer/feature/shared/location/DeliveryEstimateTest.kt`.
+- **Kiểm thử & Triển khai**:
+  - Android Gradle `:app:compileDebugKotlin` & `:app:testDebugUnitTest` (`DeliveryEstimateTest`): **BUILD SUCCESSFUL** (cần cài APK mới lên điện thoại để thấy giao diện khoảng cách/thời gian/phí ship mới).
+  - PHP lint & 4 bộ test hỗ trợ (`foodhub_conversation_120_test.php`, `foodhub_support_test.php`, `foodhub_phase5_quality_120_test.php`, `foodhub_vietnamese_context_test.php`) đạt **100%**.
+  - ✅ Đã đồng bộ lên Alwaysdata (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261124-025944`).
+
+## Biểu đồ Doanh thu Chi tiết Nhà hàng, Ảnh thật Món bán chạy & Nút Robot Trợ lý FoodHub — 24/11/2026
+
+- **Biểu đồ doanh thu Nhà hàng xem chi tiết giống Admin**:
+  - `app/src/main/java/com/example/dacs_3_composer/feature/restaurant/home/components/WeeklyRevenueCard.kt`: Tái sử dụng `AdminRevenueBars` + `adminRevenueSummary` cho phép chạm trực tiếp từng cột (`T2–CN`) trên trang Tổng quan để xem ngày, số đơn và doanh thu của ngày đó; nối nút `"Chi tiết"` (và thẻ `RevenueCard`) mở màn hình chi tiết.
+  - Tạo mới `app/src/main/java/com/example/dacs_3_composer/feature/restaurant/home/RestaurantRevenueDetailScreen.kt` (định tuyến `restaurant_revenue_detail` trong `MainRouteContainerRestaurant.kt`): chuyển đổi `Tuần` / `Tháng`, điều hướng kỳ trước / kỳ sau, tổng doanh thu đơn hoàn tất & `%` tăng trưởng so với kỳ trước, 4 thẻ chỉ số (`Đơn tạo trong kỳ`, `Giao thành công`, `Giá trị đơn trung bình`, `Tỷ lệ hủy`), biểu đồ cột tương tác theo ngày, biểu đồ đường tăng trưởng lũy kế (`AdminRevenueLine`), danh sách đơn hoàn tất của ngày đang chọn & đơn mới trong kỳ kèm hộp thoại xem chi tiết từng đơn.
+- **Hiển thị đúng ảnh thật của món trong danh sách "Món ăn bán chạy"**:
+  - `backend/api/index.php` (`GET /api/orders`): `LEFT JOIN dishes d ON d.id = oi.dish_id` trả thêm trường `imageUrl` cho từng `order_items`.
+  - `Order.kt`, `RestaurantHomeViewModel.kt`, `TopSellingDishItem.kt`: Bổ sung `OrderItem.imageUrl`, đối chiếu ảnh thật từ cả `OrderItem.imageUrl` lẫn danh sách món của quán theo `dishId` và tên món (giữ nguyên thứ tự xếp hạng `#1, #2, ...`), load qua Coil `ImageRequest` có `crossfade` thay vì chỉ hiện 1 ảnh cố định `R.drawable.images1`.
+- **Thu gọn nút Trợ lý FoodHub của Nhà hàng thành icon Robot**:
+  - `MainRouteContainerRestaurant.kt`: Thay `ExtendedFloatingActionButton("Trợ lý FoodHub")` cồng kềnh bằng nút tròn `FloatingActionButton` (`54.dp`, màu `#2159BC`) mang biểu tượng Robot `Icons.Filled.SmartToy` kèm chấm xanh trạng thái gọn mắt.
+- **Kiểm thử & Triển khai**:
+  - Android Gradle `:app:compileDebugKotlin` & `:app:testDebugUnitTest`: **BUILD SUCCESSFUL** (chưa cài APK trực tiếp lên điện thoại trong phiên này — cần build/cài bản APK mới để thấy toàn bộ thay đổi UI Android).
+  - ✅ Đã đồng bộ `backend/api/index.php` lên Alwaysdata (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261124-022847`).
+
+## Mở rộng 5 Cửa hàng + 50 Món ăn (TiDB/Cloudinary), Danh mục linh hoạt & AI học Danh mục động — 24/11/2026
+
+- **Mở rộng dữ liệu trên TiDB Cloud (`food_delivery_app`) & ảnh trên Cloudinary (`dhscw17vq`)**:
+  - Tạo **5 cửa hàng mới** (`Phở & Bún Bò Cố Đô` #60002, `Trà Sữa & Cà Phê Mây House` #60003, `Bánh Mì & Xôi Nóng 3 Miền` #60004, `Bếp Chay An Lạc` #60005, `Pizza & Burger Street Kitchen` #60006) kèm **50 món ăn mới** (10 món/quán) và **60 ảnh thật** (ảnh bìa/logo quán + ảnh món ăn) upload vĩnh viễn lên Cloudinary (`foodhub_catalog/...`).
+  - Tổng danh mục đang mở bán trong TiDB tăng lên **79 món ăn** thuộc **11 danh mục**: `Món chính` (35), `Nước giải khát` (10), `Ăn vặt` (8), `Khai vị` (7), `Tráng miệng` (6), `Món chay` (5), `Trà sữa` (3), `Cà phê` (2), `Món phụ` (1), `Đồ nướng` (1), `Bánh ngọt` (1).
+- **Mở rộng danh mục tự do cho Nhà hàng (Android + Backend)**:
+  - `app/src/main/java/com/example/dacs_3_composer/feature/restaurant/menu/components/CategoryTabs.kt`: Đổi `Row` cố định 2 mục (`Món chính`, `Khai vị`) sang `LazyRow` cuộn ngang hiển thị động tất cả danh mục thật của quán.
+  - `app/src/main/java/com/example/dacs_3_composer/feature/restaurant/menu/RestaurantMenuScreen.kt` & `RestaurantViewModel.kt`: Nâng cấp `DishDialog` cho phép chọn nhanh từ danh sách gợi ý (`Món chính`, `Khai vị`, `Ăn vặt`, `Nước giải khát`, `Tráng miệng`, `Trà sữa`, `Cà phê`, `Đồ uống`, `Món phụ`, `Món chay`, `Đồ nướng`, `Bánh ngọt`, `Combo` + danh mục hiện có của quán) **hoặc tự nhập bất kỳ danh mục mới nào**, hiển thị danh mục trên từng thẻ món và cập nhật UI ngay khi sửa món.
+  - `backend/api/index.php`: Chuẩn hóa khoảng trắng & so khớp không phân biệt hoa/thường khi tự tạo `menu_categories` trong `POST/PUT /api/dishes`, hỗ trợ lọc `GET /api/dishes?category=<tên danh mục>` và thêm `GET /api/categories`.
+- **AI học danh mục món động trực tiếp từ TiDB (`menu_categories.name`)**:
+  - `backend/ai/MenuKnowledge.php`: Thêm `categories()` đọc trực tiếp danh mục đang bán từ TiDB, `matchedCategories()` khớp thông minh theo tên danh mục đầy đủ / cụm cốt lõi (`"món giải khát"` → `"Nước giải khát"`, hỗ trợ cả danh mục hoàn toàn mới nhà hàng tự tạo như `"Sinh tố tươi"`) / cầu nối ngữ nghĩa tiếng Việt, `filterByCategories()`, ưu tiên SQL trong `candidates()`, và mở rộng `isSideDish()` / `isMainDish()` cho đồ uống/trà sữa/cà phê/bánh ngọt/món chay/đồ nướng.
+  - `backend/ai/meal-advisor-route.php`, `backend/ai/FoodHubSupport.php`, `backend/ai/FoodHubSystemPrompt.php`, `backend/ai/MealAdvisor.php`: Truyền `menuSummary.categories` cho Groq, lọc chặt món đúng danh mục khi khách hỏi theo thể loại, tăng cache version lên `10`, bổ sung từ khóa đồ uống/thể loại vào bộ định tuyến nhanh.
+  - `docs/AI_TRAINING_DATASET.jsonl`: Bổ sung 3 mẫu huấn luyện theo danh mục đồ uống/chay (tổng **68 mẫu JSONL hợp lệ**).
+- **Kiểm thử & Triển khai**:
+  - `backend/tests/foodhub_meal_quality_test.php`: **82/82 PASS** (gồm test học danh mục động `Nước giải khát` → Coca-Cola và danh mục tùy biến mới `Sinh tố tươi`).
+  - Toàn bộ **12/12 bộ test PHP** & `php -l` đạt **100%**.
+  - Android Gradle `:app:compileDebugKotlin`: **BUILD SUCCESSFUL** (chưa cài APK lên điện thoại trong phiên này — cần cài bản build mới trên điện thoại để thấy UI danh mục mở rộng ở màn hình Nhà hàng).
+  - ✅ **Đã đồng bộ lên Alwaysdata (24/11/2026)**: 15 file (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261124-015904`, Groq `openai/gpt-oss-120b`). Kiểm thử live 4/4 truy vấn danh mục động (`Nước giải khát`, `Trà sữa`/`Cà phê`, `Món chay`, `Combo trưa`) trên TiDB 79 món + Groq đều trả về đúng danh mục và đúng cửa hàng.
+
+## Huấn luyện AI gợi ý Combo 1 Món chính + 1 Món phụ cùng quán — 23/11/2026
+
+- **Nguyên nhân lỗi trước đó** (khi khách hỏi *"hãy gợi ý combo món ăn trưa nay cho tôi"* hoặc *"ghép giúp em 1 set đồ ăn trưa gồm 1 món chính và 1 món phụ dưới 100k"*):
+  1. `MenuKnowledge::mealIntent()` chưa loại bỏ từ chỉ thời gian/đệm (`nay`, `trua nay`, `toi nay`, `em/anh/chi`, `tiet kiem nhat`), làm `canFilter = false` khiến bộ ghép combo trả về rỗng.
+  2. `MenuKnowledge::wantsMeal()` chưa bao phủ các cách hỏi combo/bữa tối/sáng/set món/món chính + món phụ.
+  3. `meal-advisor-route.php` chưa kiểm tra hậu kiểm bắt buộc combo phải có đúng **1 Món chính + 1 Món phụ cùng quán**.
+  4. `FoodHubKnowledgeBase.php` có mẫu regex `do an.*oi` thiếu ranh giới từ `\b`, bắt nhầm `"đồ ăn ... dưới 100k"` (`duoi` chứa `oi`) thành sự cố chất lượng món.
+- **Thay đổi đã thực hiện**:
+  - `backend/ai/MenuKnowledge.php`: Mở rộng `wantsMeal()`, `mealQuestion()` (hỗ trợ lượt tiếp theo `"đổi combo khác"`), `mealIntent()`; thêm `isSideDish()` / `isMainDish()` và nâng cấp `meal()` luôn ưu tiên ghép **1 Món chính + 1 Món phụ cùng quán** trong ngân sách (kèm xoay vòng combo theo `$excludeIds`), cập nhật `mealAnswer()` nêu rõ món chính & món phụ.
+  - `backend/ai/FoodHubSystemPrompt.php`: Bổ sung quy tắc bắt buộc cho `kind=meal` = `1 Món chính (ids[0]) + 1 Món phụ (ids[1]) cùng quán` (vẫn giữ độ dài prompt < 4500 ký tự).
+  - `backend/ai/meal-advisor-route.php`: Tăng cache version lên `9`, tự sắp thứ tự `[Món chính, Món phụ]`, hậu kiểm chặt cùng quán + đúng ngân sách + đủ 1 chính & 1 phụ, nếu sai tự fallback sang `MenuKnowledge::meal()`, và hỗ trợ render câu trả lời tự nhiên cho cả `groq` và `cache`.
+  - `backend/ai/FoodHubKnowledgeBase.php`, `backend/ai/FoodHubSupport.php`, `backend/ai/MealAdvisor.php`: Sửa regex `food_quality_issue` có `\b` tránh bắt nhầm `"đồ ăn dưới..."`, thêm `combo|set|suat|khau phan|bua` vào bộ lọc chuyển thẳng sang `MealAdvisor` và bổ sung `tiet kiem nhat`.
+  - `docs/AI_TRAINING_DATASET.jsonl`: Bổ sung 5 mẫu huấn luyện combo (tổng **65 mẫu JSONL hợp lệ**).
+- **Kiểm thử**:
+  - `backend/tests/foodhub_meal_quality_test.php`: **72/72 checks PASS** (gồm 8 biến thể combo, xoay vòng `"đổi combo khác"`, nêu rõ món chính/món phụ).
+  - `backend/tests/foodhub_vietnamese_context_test.php`: **63/63 checks PASS** (gồm 3 test hồi quy chống bắt nhầm combo/set đồ ăn).
+  - Toàn bộ **12/12 bộ test PHP** và `php -l` đạt **100%**.
+  - ✅ **Đã đồng bộ lên Alwaysdata (23/11/2026)**: 15 file (`checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261123-085222`, Groq `openai/gpt-oss-120b`). Kiểm thử live 4/4 truy vấn combo trên TiDB + Groq đều trả về đúng **1 Món chính + 1 Món phụ cùng quán** trong ngân sách.
+
+## Mở rộng Ngữ cảnh Tiếng Việt, Knowledge Base & Bộ dữ liệu Training (v2.2.0) — 23/11/2026
+
+- **Kho kiến thức tiếng Việt FoodHub (`backend/ai/FoodHubKnowledgeBase.php`)**:
+  - Bổ sung 19 chủ đề thực tế cho cả 3 vai trò (Khách hàng, Shipper, Nhà hàng): đổi địa chỉ/SĐT, đặt 2 quán cùng giỏ, hướng dẫn đặt món, ghi chú cho quán, liên hệ quán/shipper, báo đã giao nhưng chưa nhận / lỡ cuộc gọi, chất lượng đồ ăn (nguội/sống/dị vật/ôi thiu/sai ghi chú), lỗi không áp được voucher, mã freeship, quán tự hủy đơn PayOS, quên mật khẩu/đăng nhập, đăng ký đối tác Quán/Shipper, giờ mở cửa, theo dõi bản đồ, đánh giá quán, hóa đơn VAT, sự cố Shipper tại quán/khách không nghe máy, vận hành thực đơn & tạm đóng quán của Seller.
+  - Chuẩn hóa tiếng Việt đời thường, teencode và vùng miền Bắc–Trung–Nam (`dchi`, `sdt`, `ck`, `cod`, `fs`, `ntn`, `tx`, `hok`, `hem`, `ib`, `bùn` ≠ `bún`).
+  - Nhận diện ngữ cảnh thời tiết/tâm trạng/đói bụng (`trời mưa lạnh`, `cuối tháng hết tiền`, `đói quá`, `đêm khuya`, `ăn nhẹ eat clean`) để chuyển thẳng sang tư vấn món thật từ TiDB thay vì rơi vào `clarify`.
+- **Cập nhật AI Engine**:
+  - `FoodHubSupport.php`, `MealAdvisor.php`, `FoodHubSystemPrompt.php` (v`2.2.0`), `deploy-meal-advisor.py`: Tích hợp RAG nhẹ từ `FoodHubKnowledgeBase`, thêm intent `faq` và `farewell`, sửa lỗi regex `"hóa đơn đỏ"` bị bắt nhầm thành `"đơn đó"`, mở rộng `supportTopic()` và phân loại ticket `Chất lượng món` / `Chưa nhận được hàng`.
+- **Bộ dữ liệu huấn luyện (`docs/AI_TRAINING_DATASET.jsonl`)**:
+  - Làm sạch và mở rộng từ 25 mẫu cũ lên **60 mẫu hội thoại tiếng Việt chuẩn OpenAI/Groq JSONL** (bao gồm hội thoại đa lượt, 4 vai trò, an toàn chống ảo giác & prompt injection, loại bỏ hoàn toàn câu tự nhận người thật hay bịa hành động).
+- **Kiểm thử**:
+  - Mới tạo `backend/tests/foodhub_vietnamese_context_test.php`: **60/60 checks PASS**.
+  - Toàn bộ **12/12 bộ test PHP** và `php -l` đạt **100%**.
+  - ✅ **Đã đồng bộ lên TiDB Cloud & Alwaysdata (23/11/2026)**:
+    - TiDB migration `20261123_user_search_history.sql` thành công (`user_search_history = true`, `user_recommendation_preferences = true`).
+    - Alwaysdata deploy thành công toàn bộ **15 file** (AI v2.2.0 + Recommendation + `GET /api/dishes/{id}`, `checksums_verified: true`, `php_lint: true`, backup `/home/chinh/private/foodhub/backups/meal-advisor-20261123-082417`).
+    - Lưu ý cho điện thoại: các nâng cấp AI v2.2.0 chạy ngay lập tức trên app hiện tại; để thấy giao diện Android mới (mục "Món ngon cho bạn" trộn ngẫu nhiên + ưu tiên gợi ý tìm kiếm và màn hình Profile món ăn `DishDetailScreen`), cần build/cài bản APK mới lên điện thoại.
+
+## Hệ thống Đề xuất Món ăn Cá nhân hóa theo Lịch sử Tìm kiếm — 23/11/2026
+
+- **Database Migration (chưa chạy lên TiDB production — chờ kiểm tra/xác nhận)**:
+  - `backend/database/migrations/20261123_user_search_history.sql`: Bảng `user_search_history` (`id`, `user_id`, `search_query`, `normalized_query`, `searched_at`, index `(user_id, searched_at)` & `(user_id, normalized_query)`) và `user_recommendation_preferences` (`user_id`, `search_personalization_enabled`, `retention_days`, `updated_at`).
+- **PHP Backend**:
+  - `backend/recommendation/SearchHistoryService.php`: Chuẩn hóa truy vấn tiếng Việt UTF-8, chặn truy vấn nhạy cảm (OTP/email/SĐT/token), deduplication trong cửa sổ 60s, tôn trọng tùy chọn bật/tắt cá nhân hóa và hạn lưu trữ `retentionDays`, hỗ trợ PDO và private per-user JSON fallback.
+  - `backend/recommendation/RecommendationEngine.php`: Thuật toán Content-Based (`0.40 × TextSimilarity + 0.25 × CategorySimilarity + 0.20 × exp(-0.08 × daysSince) + 0.15 × log(1+freq)/log(11)`), từ điển đồng nghĩa tiếng Việt có chọn lọc, giới hạn đa dạng (tối đa 1 biến thể/tên gốc & 3 món/quán lượt đầu), lọc chặt món hợp lệ (chưa xóa, đang bán, còn kho, giá > 0, quán đang mở/active), cold-start fallback theo số lượt đặt thật (`order_items`, loại đơn `cancelled`) + `rating_avg`, per-user cache TTL 180s.
+  - `backend/recommendation/recommendation-route.php` & `backend/api/index.php`: Các endpoint xác thực Firebase: `POST/GET/DELETE /api/search/history`, `GET /api/recommendations/personalized?limit=10`, `GET/PATCH /api/recommendations/preferences`.
+- **Android Kotlin / Jetpack Compose**:
+  - `app/src/main/java/com/example/dacs_3_composer/data/repository/RecommendationRepository.kt`: Tái sử dụng `FoodHubClient.api`, thêm `RecommendationRefreshBus` để làm mới đúng 1 lần khi quay về trang chủ.
+  - `SearchViewModel.kt`: Ghi nhận tìm kiếm đã xác nhận bất đồng bộ (chống trùng do recomposition, lỗi mạng không chặn kết quả tìm kiếm).
+  - `HomeViewModel.kt`, `HomeScreen.kt`, `DeliciousDishItem.kt`: **Gộp trực tiếp** gợi ý cá nhân hóa + xáo trộn ngẫu nhiên vào chính mục **"Món ngon cho bạn"** (không tạo mục riêng "Dành riêng cho bạn"). Quy luật: ưu tiên các món liên quan tìm kiếm gần đây ở đầu (xáo trộn nhẹ từng cụm 3 món, gắn nhãn tinh tế `"Gợi ý"`), phần món còn lại xáo trộn ngẫu nhiên theo phiên (thay vì hiển thị cứng theo `created_at DESC`), kèm nút làm mới ngay tại tiêu đề mục.
+  - `app/src/main/java/com/example/dacs_3_composer/feature/customer/dish/DishDetailScreen.kt` + `MainRouteContainerUser.kt` + `SearchScreen.kt` + `CartViewModel.kt` + `GET /api/dishes/{id}` trong `backend/api/index.php`: Tạo màn hình **Profile chi tiết món ăn** (`dish_detail/{dishId}`) hiển thị ảnh lớn, danh mục, trạng thái, giá, mô tả, thẻ nhà hàng ("Xem quán"), các món khác cùng quán, chọn số lượng và thêm ngay vào giỏ hàng (kèm hộp thoại xác nhận nếu giỏ đang có món của quán khác). Nhấn món từ Trang chủ, Tất cả món hoặc Tìm kiếm đều mở thẳng Profile món ăn.
+  - `app/src/test/java/com/example/dacs_3_composer/feature/customer/home/HomeFeedCompositionTest.kt`: Unit test kiểm chứng quy luật ưu tiên món liên quan tìm kiếm + trộn ngẫu nhiên.
+- **Kiểm thử**:
+  - `backend/tests/recommendation_system_test.php`: **31/31 checks PASS** (`P50 = 4.04ms`, `P95 = 5.45ms` trên SQLite in-memory).
+  - Toàn bộ 11/11 bộ test PHP (bao gồm hồi quy AI Phase 4 & 5) và `php -l` đạt 100%.
+  - Android Gradle `:app:compileDebugKotlin` + `:app:testDebugUnitTest` (`HomeFeedCompositionTest`): **BUILD SUCCESSFUL** (chưa cài APK/test trực tiếp trên điện thoại thật trong phiên này).
+  - **Chưa deploy lên Alwaysdata và chưa chạy migration lên TiDB production** (đúng theo yêu cầu).
+
+## Phase 4 (Personalization & Adaptive Intelligence) & Phase 5 (Quality & Performance Optimization) — 22/11/2026
+
+- **Phase 4 — Cá nhân hóa có kiểm soát & Bộ nhớ 3 tầng**:
+  - `backend/ai/UserPersonalization.php`: Lưu trữ sở thích dài hạn (Layer B) theo `userId` đã xác thực (hỗ trợ cả bảng `user_ai_preferences` trên PDO lẫn private per-user JSON fallback), quản lý consent rõ ràng (`personalizationEnabled` mặc định `false`, `useFoodPreferences`, `rememberCommunication`, `consentVersion`, `consentUpdatedAt`), trích xuất ký ức có kiểm soát (`extractCandidateMemories`: chỉ nhận tuyên bố bền vững tường minh, loại trừ yêu cầu tạm thời `"hôm nay"`, câu hỏi, giả định, người thứ 3, prompt injection, và không tự lưu chi tiết dị ứng/y tế), tự hủy cache món ăn khi sửa/xóa sở thích, và Adaptive Communication Engine (`resolveStyle`: 5 phong cách `friendly`/`professional`/`concise`/`empathetic`/`formal`, yêu cầu hiện tại luôn ưu tiên hơn bộ nhớ dài hạn).
+  - `backend/ai/ConversationContext.php` & `backend/ai/FoodHubSupport.php`: Bổ sung Layer C Task/Support Memory (`taskMemory` lưu `ticketId`, `orderId`, `status`, `pendingAction`, `lastVerifiedUpdate`), chuẩn hóa tóm tắt chuyển tiếp nhân viên thật (Human Handoff) có lọc PII trước khi ghi vào `conversations`/`messages`.
+  - `backend/ai/FoodHubSystemPrompt.php`: Bổ sung Prompt Versioning (`foodhub-support` v`2.1.0`, `foodhub-meal-advisor` v`2.1.0`) và phần mở rộng Personalization (chỉ dùng sở thích đã duyệt khi hữu ích, yêu cầu hiện tại ưu tiên cao hơn).
+- **Phase 5 — Đánh giá chất lượng, Phản hồi & Hiệu năng**:
+  - `backend/ai/AiQualityMonitor.php`: Thu thập phản hồi 👍/👎 + 6 lý do chuẩn hóa (chống trùng lặp vote theo user+conversation+message, rate-limit 30/giờ), đo lường latency (Avg/P50/P95), token usage (`promptTokens`/`completionTokens`/`totalTokens` từ Groq), tỷ lệ lỗi provider, số lượt handoff, và Quality Scorecard có trọng số kèm chốt chặn độc lập cho lỗi Safety/Privacy.
+  - `backend/ai/ai-personalization-route.php` & `backend/api/index.php`: Thêm các REST endpoint xác thực Firebase: `GET/PUT/DELETE /api/ai/preferences`, `PUT /api/ai/preferences/consent`, `DELETE /api/ai/preferences/{field}`, `POST /api/ai/feedback`, và `GET /api/ai/metrics` (chỉ Admin — trả 403 cho role khác).
+  - `backend/ai/MealAdvisor.php` & `backend/ai/meal-advisor-route.php`: Bổ sung `$lastUsage` đo token Groq, `Server-Timing` tách `meal`/`memory`/`provider`, trả thêm `messageId`, `promptVersion`, `usage` (giữ tương thích ngược Android), siết thêm guardrail ETA (`sẽ tới trong X phút`) và lọc toàn bộ emoji khi `emojiPreference=none`.
+  - `backend/database/migrations/20261122_ai_personalization_and_feedback.sql`: Migration an toàn (`CREATE TABLE IF NOT EXISTS`) cho `user_ai_preferences` và `ai_feedback`.
+- **Kiểm thử**:
+  - `backend/tests/foodhub_phase4_personalization_120_test.php`: **120/120 PASS** (baseline 107/120 → mở rộng nhận diện xưng hô `anh/chị kiểm tra/xem/cần` → 120/120).
+  - `backend/tests/foodhub_phase5_quality_120_test.php`: **120/120 PASS** (baseline 117/120 → bổ sung guardrail `sẽ tới trong X phút` → 120/120).
+  - Toàn bộ 10/10 bộ test PHP và `php -l` trên 11/11 file đều đạt 100%.
+- **Triển khai thực tế**:
+  - ✅ Đã chạy SQL migration `20261122_ai_personalization_and_feedback.sql` lên TiDB Cloud (`food_delivery_app`): xác nhận 2 bảng `user_ai_preferences` và `ai_feedback` đã sẵn sàng.
+  - ✅ Đã deploy thành công toàn bộ 11 file Phase 4 & 5 lên Alwaysdata (`checksums_verified: true`, `php_lint: true`, backup: `/home/chinh/private/foodhub/backups/meal-advisor-20261122-154307`, Groq `openai/gpt-oss-120b` đã cấu hình).
+- **Việc tiếp theo tùy chọn**:
+  - Gắn nút UI 👍/👎 (`POST /api/ai/feedback`) và màn hình cài đặt AI Personalization (`GET/PUT/DELETE /api/ai/preferences`, `PUT /api/ai/preferences/consent`) trên ứng dụng Android Compose.
+
+## Nâng cấp FoodHub AI Human-Like Conversation & Bộ test 120 tình huống — 22/11/2026
+
+- **Kiến trúc gọn & dễ bảo trì**:
+  - Tách System Prompt chính thức sang `backend/ai/FoodHubSystemPrompt.php` (FoodHub AI minh bạch là trợ lý AI, 15 nguyên tắc giao tiếp + ví dụ phong cách + `buildMessages()` multi-turn kèm chỉ dẫn động về xưng hô, độ ngắn gọn, tiếp nối hội thoại, cảm xúc tức giận).
+  - Tách quản lý ngữ cảnh hội thoại sang `backend/ai/ConversationContext.php` (sliding window 4 lượt, rolling summary bảo toàn `orderId`/`topic`/`issue`/`pronoun`/`confirmedActions`/`unresolvedQuestion`, nhận diện xưng hô nhất quán `anh`/`chị`/`bạn`/`mình`, phát hiện yêu cầu ngắn gọn `preferBrief`, ẩn dữ liệu nhạy cảm OTP/mật khẩu/email/SĐT).
+  - Cập nhật `backend/ai/MealAdvisor.php`: dùng `FoodHubSystemPrompt::buildMessages()`, thêm `temperature: 0.6` cho Groq multi-turn, sửa lỗi false-positive ở guardrail ETA (cho phép nhắc thời gian khách đã đợi, vẫn chặn bịa ETA tương lai) và guardrail hoàn tiền (cho phép câu phủ định trung thực "chưa xác nhận đã hoàn tiền"), bổ sung guardrail chống tự nhận người thật, chống lộ API key/prompt và lọc emoji vui khi khách tức giận.
+  - Cập nhật `backend/ai/FoodHubSupport.php`: mở rộng chuẩn hóa tiếng lóng/viết tắt (`dc`, `mk/mik`, `tks/thx`, `ib`, `rep/trl`, `lun`, `dzay`), mở rộng `intent()` & `detectEmotion()` (8 trạng thái, sửa lỗi `hài long` có dấu), sửa bug `(bool)preg_match` cho `$accountIncident`, cho `identity` đi qua `dispatch($humanize, ...)`, bổ sung ngữ cảnh đa lượt ("ừ đúng rồi", "vậy còn bao lâu", "thế hủy đi", "nếu lâu quá thì sao") và đọc `orderId` từ `summary`.
+  - Cập nhật `backend/ai/meal-advisor-route.php`: dùng `ConversationContext`, giữ `history` client gửi khi phiên mới chưa có trên server, giải phóng `$memoryLock` trong `finally`.
+  - Cập nhật `backend/deploy/deploy-meal-advisor.py`: bổ sung `ai/FoodHubSystemPrompt.php` và `ai/ConversationContext.php`.
+- **Kiểm thử**:
+  - Tạo `backend/tests/foodhub_conversation_120_test.php` (6 nhóm × 20 tình huống = 120 cases). Baseline lần chạy đầu đạt 99/120 (82.5%) — phát hiện và sửa các lỗi thật trong `FoodHubSupport.php` — chạy lại đạt **120/120 (100%)**.
+  - Toàn bộ 6 bộ test PHP hồi quy còn lại (`foodhub_support_test.php`, `foodhub_human_ai_test.php`, `foodhub_conversation_style_test.php`, `meal_chat_test.php`, `meal_advisor_fast_test.php`, `menu_knowledge_test.php`) và `php -l` đều đạt.
+  - Báo cáo đánh giá lưu tại `docs/AI_CONVERSATION_EVALUATION.md`.
+- **Nâng cấp tư vấn món ăn dựa trên 29 món thật trên TiDB Cloud (`Nhà hàng AnChin`, `Jolllibee`, `Mì cay Seoul`, `Việt Nam Food`)**:
+  - `MenuKnowledge.php`: Bổ sung khớp tên quán linh hoạt (`Jollibee`/`Jolibee` ↔ `Jolllibee`, `An Chin` ↔ `Nhà hàng AnChin`, `Seoul` ↔ `Mì cay Seoul`), mở rộng từ khóa đồng nghĩa theo thực đơn thật (cay/kim chi/gochujang, ăn vặt/tokbokki/chuối, tráng miệng/kem/sundae, món Hàn, gà rán, món nước), hỗ trợ nhóm `Ăn vặt` trong ghép bữa 1 người cùng quán, và làm tự nhiên `mealAnswer()`.
+  - `MealChat.php`: Sửa lỗi `renderReply()` trước đây vứt bỏ toàn bộ câu trả lời tự nhiên của AI khi có số phần nhỏ (`1 phần`, `2 miếng`, `1 nước ngọt`, `1 người`), trong khi vẫn chặn tuyệt đối mọi giá tiền tự bịa ngoài `{gia:ID}`. Nâng cấp giọng điệu `answer()`.
+  - `FoodHubSystemPrompt.php` + `MealAdvisor.php`: Tách `FoodHubSystemPrompt::mealAdvisor()` đồng nhất giọng FoodHub AI, hỗ trợ `reasons` hấp dẫn theo từng món dựa trên mô tả thật, dùng `temperature: 0.5` cho Groq, truyền `pronounPreference` & `isContinuation`, tăng cache version lên `7`.
+  - Tạo bộ test mới `backend/tests/foodhub_meal_quality_test.php` (22 checks trên bản sao 29 món thật từ TiDB) — toàn bộ 8/8 bộ test PHP và `php -l` đạt.
+  - ✅ Đã deploy thành công lên Alwaysdata (`backup: meal-advisor-20261122-152004`, checksums verified, php_lint passed) và kiểm thử live trực tiếp với TiDB + Groq (`openai/gpt-oss-120b`): các câu *"80k cay cay no bụng"* và *"Jollibee có món gì ngon dưới 70k"* đều đạt `rendered_ok=YES` với phản hồi tự nhiên và lý do từng món bám sát mô tả thật.
+
+## Hội thoại tiếng Việt ngày 22/11/2026
+
+POST ai/meal-advisor dùng Firebase, account TiDB và Groq gpt-oss-120b. MealAdvisor.php áp dụng phần IV master prompt cho câu trả lời hỗ trợ. Mười kịch bản ở docs/AI_CONVERSATION_SCENARIOS.md và docs/AI_TRAINING_DATASET.jsonl là mô phỏng. Android tạo UUID theo instance repository của màn chat. Backend sử dụng cache riêng theo UID và vai trò, giữ tối đa bốn phiên, bốn lượt gần nhất và tóm tắt có cấu trúc. Phiên quá 24 giờ không được nạp lại, được dọn khi tài khoản ghi tiếp. Thiết bị chạy bản cũ vẫn gửi cửa sổ lịch sử như trước. Không có tác vụ cập nhật trọng số. Kiểm thử route với hai tài khoản, hai UUID và sáu lượt xác nhận cách ly, cửa sổ và tóm tắt.
 ## Voucher theo mẫu HTML
 
 Banner Compose dùng gradient, chiều cao tối thiểu 240dp, bo góc 24dp, chữ phía trái và ảnh lớn xoay 12 độ, tràn góc dưới phải. Tạo mới đúng bốn ảnh nền trong suốt bánh mì, cơm tấm, trà sữa, bún bò. Ảnh thứ năm dùng nguyên ảnh pizza trong HTML người dùng cung cấp. Tệp gốc nằm ở backend/assets/vouchers. Ảnh dùng cho mã miễn phí giao FHPHOSHIP, đổi tiêu đề thành Giao ngon tận nhà. Mức giảm, hạn dùng và lượt sử dụng giữ theo các voucher đã tạo. APK build/deliverables/FoodHub-Voucher-Hero-debug.apk đã build và unit test đạt. Chưa cài lên điện thoại vì ADB không có thiết bị kết nối trong lần kiểm tra này.
 
-## Nâng cấp Trợ lý CSKH FoodHub như người thật (10 Yếu Tố) — 20/11/2026
+## Nâng cấp AI CSKH — Phiên 2: Phản hồi tự nhiên hơn — 20/11/2026 (tối)
+
+**Vấn đề được giải quyết:** AI trả lời còn cứng nhắc, không hiểu ngữ cảnh, không hiểu ý truyền đạt.
+
+### Thay đổi đã thực hiện
+
+**`backend/ai/MealAdvisor.php`**:
+- **Rewrite hoàn toàn `humanizeSupport()`**: System prompt mới viết theo kiểu nhân vật ("Em là Linh — nhân viên CSKH FoodHub") thay vì danh sách quy tắc đánh số. Bao gồm 4 cặp ví dụ trước/sau (❌ máy móc / ✅ người thật) nhúng trực tiếp vào prompt. Hướng dẫn đa dạng câu mở, tránh "Dạ" ở đầu mỗi câu, dùng "nè/nha/nhé/thôi" tự nhiên.
+- **Thêm method `generateMultiTurn()`**: Gọi Groq trực tiếp với messages array multi-turn thực sự (role: user/assistant cho từng lượt lịch sử, facts được inject dưới dạng system message cuối cùng thay vì JSON blob trong user message). Tối đa 4 lượt lịch sử.
+- **Bỏ `reasoning_effort: 'low'`** khỏi path humanize. `max_completion_tokens` tăng lên 1024.
+- Timeout cURL tăng lên 8000ms cho path multi-turn.
+
+**`backend/ai/FoodHubSupport.php`**:
+- **Mở rộng `detectEmotion()`**: Thêm pattern tiếng Việt tự nhiên hơn:
+  - angry: `troi oi`, `oi troi`, `vo ly`, `nuc cuoi`, `khong chap nhan`, `that vong qua`, v.v.
+  - anxious: `sao.*chua thay` (bắt "sao mãi chưa thấy shipper"), `doi.*lau lam`, `doi ca tieng`
+  - frustrated: `chan qua`, `khong hieu sao`, `da noi roi ma`, v.v.
+  - urgent: `gap lam`, `voi len`, `can ngay`
+  - satisfied: `tot lam`, `tuyet voi`, `oke nha`
+- **Mở rộng `intent()`**: Thêm pattern bị bỏ sót:
+  - `order`: `dau roi`, `o dau roi`, `sao lau vay`, `sao chua thay`, `bao lau nua`, `con cach bao lau`
+  - `voucher`: `ma giam gia`, `co ma giam`, `dung ma`
+  - `incident`: `tien bi tru 2 lan`, `mat tien`, `thanh toan 2 lan`
+  - `role`/greeting: `hey`, `alo`, `chao foodhub`, `lam gi duoc`
+  - `thanks`: `ok nhe`, `oke nha`
+
+**`backend/tests/foodhub_human_ai_test.php`**:
+- Cập nhật mock transport để parse facts từ system message cuối (DỮ LIỆU ĐÃ XÁC THỰC) thay vì `messages[1].content`.
+
+### Kết quả kiểm thử
+```
+foodhub_human_ai_test.php → 6/6 PASSED
+foodhub_support_test.php → PASSED
+meal_chat_test.php → 26 checks + Groq validation PASSED
+meal_advisor_fast_test.php → 61 checks PASSED
+php -l tất cả 3 file AI → No syntax errors
+```
+
+### Trạng thái Deploy
+- ✅ **Deploy thành công** lúc 20/11/2026 14:20 UTC — `deploy-meal-advisor.py` xác nhận checksums và php_lint.
+- Backup tự động: `/home/chinh/private/foodhub/backups/meal-advisor-20261120-142048`
+- **Bước tiếp theo**: Test trực tiếp trên thiết bị:
+  - "Sao mãi chưa thấy shipper tới?" → AI phải phản hồi đồng cảm, tự nhiên, không bịa ETA
+  - "Đồ ăn bị đổ hết rồi!" → AI đồng cảm 1 câu rồi hướng dẫn tạo phiếu
+  - "Có mã giảm giá không?" / "hey shop ơi" / "oke nha cảm ơn"
+
+
 
 - **Hoàn thiện kiến trúc 10 yếu tố cho Groq AI Assistant**:
   1. Giao tiếp tự nhiên tiếng Việt đời thường, xưng hô em - anh/chị, tự thích ứng cách xưng hô, hiểu viết tắt (tui, shp, đh, ko, nãy, 80k), bỏ qua lỗi telex/chính tả.

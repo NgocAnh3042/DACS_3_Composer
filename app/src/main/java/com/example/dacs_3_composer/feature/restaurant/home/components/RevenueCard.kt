@@ -20,10 +20,33 @@ fun RevenueCard(
     revenue: String,
     modifier: Modifier = Modifier
 ) {
+    RevenueCardContent(revenue = revenue, modifier = modifier, onClick = null)
+}
+
+@Composable
+fun InteractiveRevenueCard(
+    revenue: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    RevenueCardContent(revenue = revenue, modifier = modifier, onClick = onClick)
+}
+
+@Composable
+private fun RevenueCardContent(
+    revenue: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
     Card(
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2159BC)) // Màu xanh đặc trưng
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF2159BC),
+            disabledContainerColor = Color(0xFF2159BC)
+        )
     ) {
         Column(
             modifier = Modifier.padding(20.dp),

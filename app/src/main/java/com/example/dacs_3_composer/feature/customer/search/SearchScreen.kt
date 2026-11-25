@@ -108,6 +108,14 @@ fun SearchScreen(
                         }
 
                         items(restaurantResults) { restaurant ->
+                            val coords = com.example.dacs_3_composer.feature.shared.location.UserLocationCache.cachedCoordinates
+                            val enriched = remember(restaurant, coords) {
+                                com.example.dacs_3_composer.feature.shared.location.DeliveryEstimate.enrichRestaurant(
+                                    restaurant,
+                                    coords?.first,
+                                    coords?.second
+                                )
+                            }
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -115,7 +123,7 @@ fun SearchScreen(
                                         navController.navigate("restaurant_detail/${restaurant.id}")
                                     }
                             ) {
-                                RestaurantItem(restaurant = restaurant)
+                                RestaurantItem(restaurant = enriched)
                             }
                         }
                     }
@@ -136,8 +144,8 @@ fun SearchScreen(
                             SearchDishItem(
                                 wrapper = wrapper,
                                 onItemClick = {
-                                    // Bấm vào sản phẩm -> Dẫn thẳng về trang nhà hàng tương ứng qua restaurantId
-                                    navController.navigate("restaurant_detail/${wrapper.dish.restaurantId}")
+                                    // Bấm vào sản phẩm -> Mở thẳng Profile chi tiết món ăn
+                                    navController.navigate("dish_detail/${wrapper.dish.id}")
                                 }
                             )
                         }

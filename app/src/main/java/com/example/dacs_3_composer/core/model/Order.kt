@@ -15,7 +15,8 @@ data class OrderItem(
     var dishId: String = "",
     var name: String = "",
     var quantity: Int = 0,
-    var price: Double = 0.0
+    var price: Double = 0.0,
+    var imageUrl: String = ""
 )
 
 data class Order(
