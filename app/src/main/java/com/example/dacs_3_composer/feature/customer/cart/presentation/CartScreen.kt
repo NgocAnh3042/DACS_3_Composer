@@ -22,6 +22,7 @@
     import androidx.compose.material.icons.filled.Money
     import androidx.compose.material3.*
     import androidx.compose.runtime.*
+    import androidx.lifecycle.compose.collectAsStateWithLifecycle
     import androidx.compose.ui.Alignment
     import androidx.compose.ui.Modifier
     import androidx.compose.ui.draw.clip
@@ -62,9 +63,10 @@
         onBackClick: () -> Unit,
         onNavigateToPayment: (String, Double) -> Unit
     ) {
+        val cartUiState by cartViewModel.uiState.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val screenScope = rememberCoroutineScope()
-        val cartItems = cartViewModel.cartItems
+        val cartItems = cartUiState.cartItems
         val totalDishPrice = cartViewModel.getTotalPrice()
 
         var currentName by remember { mutableStateOf("Chưa cập nhật tên") }
@@ -80,7 +82,7 @@
         var editingAddressIndex by remember { mutableStateOf<Int?>(null) }
         var addressToEditData by remember { mutableStateOf<SavedAddress?>(null) }
 
-        val activeRestaurantId = cartViewModel.currentRestaurantId.ifBlank {
+        val activeRestaurantId = cartUiState.currentRestaurantId.ifBlank {
             cartItems.firstOrNull()?.dish?.restaurantId.orEmpty()
         }
 
@@ -124,7 +126,7 @@
         var paymentMethod by remember { mutableStateOf("CASH") } // "CASH" hoặc "ONLINE"
 
         // Danh sách Khuyến mãi và trạng thái chọn mã từ Firebase
-        val listPromotionsFromFirebase = cartViewModel.availablePromotions
+        val listPromotionsFromFirebase = cartUiState.availablePromotions
         var selectedPromotion by remember { mutableStateOf<Promotion?>(null) }
         var showVoucherBottomSheet by remember { mutableStateOf(false) }
         val voucherSheetState = rememberModalBottomSheetState()
@@ -187,8 +189,8 @@
                                         customerAddress = if (currentAddressDetail.isNotBlank() && currentAddressDetail != currentAddress) "$currentAddressDetail, $currentAddress" else currentAddress,
                                         customerLat = currentLat,
                                         customerLng = currentLng,
-                                        restaurantId = cartViewModel.currentRestaurantId.ifBlank { "RES_DEFAULT" },
-                                        restaurantName = cartViewModel.currentRestaurantName.ifBlank { "Cửa hàng đối tác" },
+                                        restaurantId = cartUiState.currentRestaurantId.ifBlank { "RES_DEFAULT" },
+                                        restaurantName = cartUiState.currentRestaurantName.ifBlank { "Cửa hàng đối tác" },
                                         shippingFee = shippingFee,
                                         totalDishPrice = totalDishPrice,
                                         finalTotal = finalTotal,

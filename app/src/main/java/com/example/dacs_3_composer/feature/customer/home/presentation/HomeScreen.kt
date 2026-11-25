@@ -53,6 +53,7 @@ fun HomeScreen(
     cartViewModel: CartViewModel = viewModel()
 ) {
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val cartUiState by cartViewModel.uiState.collectAsStateWithLifecycle()
     val dishes = homeUiState.deliciousDishes
     val restaurants = homeUiState.restaurantsList
     val isLoading = homeUiState.isLoading
@@ -114,7 +115,7 @@ fun HomeScreen(
             )
         }
 
-        item { Banner(cartViewModel.availablePromotions.filter { it.status == "active" && (it.usageLimit == 0L || it.usageCount < it.usageLimit) }) }
+        item { Banner(cartUiState.availablePromotions.filter { it.status == "active" && (it.usageLimit == 0L || it.usageCount < it.usageLimit) }) }
         item {
             Surface(
                 onClick = { navController.navigate("meal_advisor") },
@@ -270,8 +271,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable {
-                        cartViewModel.currentRestaurantId = restaurant.id
-                        cartViewModel.currentRestaurantName = restaurant.name
+                        cartViewModel.setCurrentRestaurant(restaurant.id, restaurant.name)
                         navController.navigate("restaurant_detail/${restaurant.id}")
                     }
             ) {

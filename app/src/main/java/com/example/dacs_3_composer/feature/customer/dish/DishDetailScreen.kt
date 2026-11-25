@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +62,7 @@ fun DishDetailScreen(
     onOpenDish: (String) -> Unit,
     onViewCartClick: () -> Unit
 ) {
+    val cartUiState by cartViewModel.uiState.collectAsStateWithLifecycle()
     var dish by remember(dishId) { mutableStateOf(initialDish) }
     var restaurantName by remember(dishId) { mutableStateOf(initialRestaurant?.name.orEmpty()) }
     var restaurantAddress by remember(dishId) { mutableStateOf(initialRestaurant?.address.orEmpty()) }
@@ -124,7 +126,7 @@ fun DishDetailScreen(
         }
     }
 
-    val totalCartQuantity = cartViewModel.cartItems.sumOf { it.quantity }
+    val totalCartQuantity = cartUiState.cartItems.sumOf { it.quantity }
 
     fun performAddToCart(target: Dish, qty: Int, clearExisting: Boolean) {
         if (clearExisting) {
@@ -244,10 +246,10 @@ fun DishDetailScreen(
                         // Nút thêm vào giỏ hàng
                         Button(
                             onClick = {
-                                val hasOtherStore = cartViewModel.cartItems.isNotEmpty() &&
-                                    cartViewModel.currentRestaurantId.isNotBlank() &&
+                                val hasOtherStore = cartUiState.cartItems.isNotEmpty() &&
+                                    cartUiState.currentRestaurantId.isNotBlank() &&
                                     currentDish.restaurantId.isNotBlank() &&
-                                    cartViewModel.currentRestaurantId != currentDish.restaurantId
+                                    cartUiState.currentRestaurantId != currentDish.restaurantId
                                 if (hasOtherStore) {
                                     showSwitchRestaurantDialog = true
                                 } else {
@@ -462,8 +464,7 @@ fun DishDetailScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
                                 .clickable {
-                                    cartViewModel.currentRestaurantId = currentDish.restaurantId
-                                    cartViewModel.currentRestaurantName = restaurantName
+                                    cartViewModel.setCurrentRestaurant(currentDish.restaurantId, restaurantName)
                                     onOpenRestaurant(currentDish.restaurantId)
                                 },
                             shape = RoundedCornerShape(20.dp),

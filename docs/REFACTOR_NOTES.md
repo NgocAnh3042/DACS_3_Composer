@@ -134,5 +134,5 @@ Mỗi giai đoạn cập nhật tài liệu này và `docs/ANDROID_ARCHITECTURE.
 
 - Chuyển `CartScreen`, `CartViewModel` và `CartItem` vào `feature/customer/cart/presentation/`; cập nhật các consumer ở route customer, Home, chi tiết món và chi tiết quán.
 - Giữ `CartViewModel` do `MainRouteContainerUser` tạo và truyền vào các route để giỏ tiếp tục được chia sẻ như trước; không đổi đặt hàng, tính phí, voucher hay lưu địa chỉ.
-- Đây mới là bước sắp xếp package. Cart chưa có `CartUiState`/event thống nhất: màn hình vẫn đọc `mutableStateList` trực tiếp, ViewModel vẫn gọi `FoodHubClient` và `FirebaseAuth` trực tiếp. Tách các phần này sẽ làm ở bước kế tiếp sau khi chuẩn bị state contract.
-- Kết quả: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Có cảnh báo deprecated icon sẵn trong `CartScreen`; chưa test trên điện thoại.
+- Ban đầu chỉ sắp xếp package; tiếp đó thêm `CartUiState` dùng `StateFlow`, chuyển Cart/Home/DishDetail/RestaurantDetail sang thu thập state lifecycle-aware và thay thao tác ghi thông tin quán bằng hàm ViewModel. Giữ nguyên API và Firebase call trực tiếp, chưa tách repository/use case hoặc one-shot event.
+- Kết quả sau hai thay đổi: `assembleDebug`, `testAlwaysdataDebugUnitTest`, `testLocalDebugUnitTest` thành công. Có cảnh báo deprecated icon sẵn trong `CartScreen`; chưa test trên điện thoại.

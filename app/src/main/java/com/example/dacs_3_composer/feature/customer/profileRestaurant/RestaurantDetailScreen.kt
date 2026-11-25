@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,12 +55,12 @@ fun RestaurantDetailScreen(
 
     LaunchedEffect(restaurant) {
         if (restaurant != null) {
-            cartViewModel.currentRestaurantId = restaurant.id
-            cartViewModel.currentRestaurantName = restaurant.name
+            cartViewModel.setCurrentRestaurant(restaurant.id, restaurant.name)
         }
     }
 
-    val cartItems = cartViewModel.cartItems
+    val cartUiState by cartViewModel.uiState.collectAsStateWithLifecycle()
+    val cartItems = cartUiState.cartItems
     val totalQuantity = cartItems.sumOf { it.quantity }
     val totalPrice = cartViewModel.getTotalPrice()
 

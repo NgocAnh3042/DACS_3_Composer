@@ -1,7 +1,6 @@
 package com.example.dacs_3_composer.feature.customer.cart.presentation
 
 import android.util.Log
-import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dacs_3_composer.core.model.DishItem
@@ -12,6 +11,9 @@ import com.example.dacs_3_composer.core.model.Promotion
 import com.example.dacs_3_composer.core.model.UserAddress
 import com.example.dacs_3_composer.data.remote.FoodHubClient
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CartItem(
@@ -19,17 +21,20 @@ data class CartItem(
     val quantity: Int
 )
 
+data class CartUiState(
+    val cartItems: List<CartItem> = emptyList(),
+    val currentRestaurantId: String = "",
+    val currentRestaurantName: String = "",
+    val availablePromotions: List<Promotion> = emptyList()
+)
+
 class CartViewModel : ViewModel() {
+    private val _uiState = MutableStateFlow(CartUiState())
+    val uiState = _uiState.asStateFlow()
 
-    var cartItems = mutableStateListOf<CartItem>()
-        private set
-
-    var currentRestaurantId: String = ""
-    var currentRestaurantName: String = ""
-
-    // Danh sách khuyến mãi được tải từ MySQL API.
-    var availablePromotions = mutableStateListOf<Promotion>()
-        private set
+    fun setCurrentRestaurant(id: String, name: String) {
+        _uiState.update { it.copy(currentRestaurantId = id, currentRestaurantName = name) }
+    }
 
     /**
      * Tải voucher đang hiệu lực từ MySQL API.
@@ -37,7 +42,7 @@ class CartViewModel : ViewModel() {
     fun fetchPromotionsFromFirebase() {
         viewModelScope.launch {
             runCatching { FoodHubClient.list<Promotion>("promotions") }
-                .onSuccess { availablePromotions.clear(); availablePromotions.addAll(it) }
+                .onSuccess { promotions -> _uiState.update { it.copy(availablePromotions = promotions) } }
                 .onFailure { Log.e("CartViewModel", "Lỗi tải voucher MySQL: ${it.message}") }
         }
     }
@@ -69,6 +74,7 @@ class CartViewModel : ViewModel() {
             return
         }
 
+        val cartItems = _uiState.value.cartItems
         if (cartItems.isEmpty()) {
             onFailure("Giỏ hàng đang trống!")
             return
@@ -76,8 +82,8 @@ class CartViewModel : ViewModel() {
 
         val finalRestaurantId = if (restaurantId.isNotBlank() && restaurantId != "RES_DEFAULT") {
             restaurantId
-        } else if (this.currentRestaurantId.isNotBlank()) {
-            this.currentRestaurantId
+        } else if (_uiState.value.currentRestaurantId.isNotBlank()) {
+            _uiState.value.currentRestaurantId
         } else {
             cartItems.firstOrNull()?.dish?.restaurantId ?: ""
         }
@@ -119,7 +125,7 @@ class CartViewModel : ViewModel() {
             customerLat = customerLat,
             customerLng = customerLng,
             restaurantId = finalRestaurantId,
-            restaurantName = restaurantName.ifBlank { this.currentRestaurantName }.ifBlank { "Nhà hàng đối tác" },
+            restaurantName = restaurantName.ifBlank { _uiState.value.currentRestaurantName }.ifBlank { "Nhà hàng đối tác" },
             restaurantLat = null,
             restaurantLng = null,
             shipperId = "",
@@ -135,18 +141,18 @@ class CartViewModel : ViewModel() {
 
     fun addToCart(dish: DishItem, quantity: Int = 1) {
         val safeQty = quantity.coerceAtLeast(1)
-        if (dish.restaurantId.isNotBlank()) {
-            this.currentRestaurantId = dish.restaurantId
-        }
-        if (dish.restaurantName.isNotBlank()) {
-            this.currentRestaurantName = dish.restaurantName
-        }
-        val existingItem = cartItems.find { it.dish.id == dish.id }
-        if (existingItem != null) {
-            val index = cartItems.indexOf(existingItem)
-            cartItems[index] = existingItem.copy(quantity = existingItem.quantity + safeQty)
-        } else {
-            cartItems.add(CartItem(dish = dish, quantity = safeQty))
+        _uiState.update { state ->
+            val existingItem = state.cartItems.find { it.dish.id == dish.id }
+            val items = if (existingItem != null) {
+                state.cartItems.map { item ->
+                    if (item.dish.id == dish.id) item.copy(quantity = item.quantity + safeQty) else item
+                }
+            } else state.cartItems + CartItem(dish = dish, quantity = safeQty)
+            state.copy(
+                cartItems = items,
+                currentRestaurantId = dish.restaurantId.ifBlank { state.currentRestaurantId },
+                currentRestaurantName = dish.restaurantName.ifBlank { state.currentRestaurantName }
+            )
         }
     }
 
@@ -168,25 +174,24 @@ class CartViewModel : ViewModel() {
     }
 
     fun minusFromCart(dish: DishItem) {
-        val existingItem = cartItems.find { it.dish.id == dish.id } ?: return
-        val index = cartItems.indexOf(existingItem)
-
-        if (existingItem.quantity > 1) {
-            cartItems[index] = existingItem.copy(quantity = existingItem.quantity - 1)
-        } else {
-            cartItems.removeAt(index)
-            if (cartItems.isEmpty()) {
-                currentRestaurantId = ""
-                currentRestaurantName = ""
-            }
+        _uiState.update { state ->
+            val existingItem = state.cartItems.find { it.dish.id == dish.id } ?: return@update state
+            val items = if (existingItem.quantity > 1) {
+                state.cartItems.map { item ->
+                    if (item.dish.id == dish.id) item.copy(quantity = item.quantity - 1) else item
+                }
+            } else state.cartItems.filterNot { it.dish.id == dish.id }
+            state.copy(
+                cartItems = items,
+                currentRestaurantId = if (items.isEmpty()) "" else state.currentRestaurantId,
+                currentRestaurantName = if (items.isEmpty()) "" else state.currentRestaurantName
+            )
         }
     }
 
-    fun getTotalPrice(): Double = cartItems.sumOf { it.dish.price * it.quantity }
+    fun getTotalPrice(): Double = _uiState.value.cartItems.sumOf { it.dish.price * it.quantity }
 
     fun clearCart() {
-        cartItems.clear()
-        currentRestaurantId = ""
-        currentRestaurantName = ""
+        _uiState.update { it.copy(cartItems = emptyList(), currentRestaurantId = "", currentRestaurantName = "") }
     }
 }
