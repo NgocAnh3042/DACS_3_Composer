@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "948126651845-lut8iqv57l4ne6a48cm2rujgt6ac367e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.dacs_3_composer",
+            "certificate_hash": "aa61e566895053edcc3aeb7a7a6944697a419464"
+          }
+        },
+        {
           "client_id": "948126651845-4npaa2mealpo7n5on7i4k8dugevr7vdl.apps.googleusercontent.com",
           "client_type": 3
         }

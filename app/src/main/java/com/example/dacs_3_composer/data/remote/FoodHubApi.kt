@@ -1,6 +1,7 @@
 package com.example.dacs_3_composer.data.remote
 
 import com.google.android.gms.tasks.Tasks
+import com.example.dacs_3_composer.BuildConfig
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.gson.JsonDeserializationContext
@@ -40,8 +41,8 @@ interface FoodHubApi {
 }
 
 object FoodHubClient {
-    // Hosted API: device requests no longer depend on the development computer.
-    const val BASE_URL = "https://chinh.alwaysdata.net/food-delivery-api/api/"
+    // The selected product flavor supplies either the local ngrok URL or Alwaysdata.
+    private val baseUrl = BuildConfig.FOODHUB_API_BASE_URL
     val gson: Gson = GsonBuilder()
         .registerTypeAdapter(Timestamp::class.java, object : JsonSerializer<Timestamp>, JsonDeserializer<Timestamp> {
             private val formats = listOf("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss'Z'")
@@ -68,7 +69,7 @@ object FoodHubClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
-        Retrofit.Builder().baseUrl(BASE_URL).client(client)
+        Retrofit.Builder().baseUrl(baseUrl).client(client)
             .addConverterFactory(GsonConverterFactory.create(gson)).build()
             .create(FoodHubApi::class.java)
     }

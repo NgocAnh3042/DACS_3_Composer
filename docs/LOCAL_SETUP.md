@@ -6,6 +6,22 @@ Android gọi API trên Alwaysdata tại https://chinh.alwaysdata.net/food-deliv
 
 Mở thư mục có `settings.gradle.kts`. `local.properties` trỏ SDK của máy và không commit. `app/google-services.json` phải thuộc đúng project/package.
 
+### Chạy app qua ngrok
+
+Chọn `localDebug`. Tạo `backend.local.properties` từ file mẫu và đặt `apiBaseUrl` thành `https://<domain-ngrok>/food-delivery-api/api/`. Backend local cần cấu hình Firebase AnChinGo (`dacs3-anchin-go`) và TiDB Cloud trong `backend/config.local.php`.
+
+Từ thư mục gốc dự án, chạy PHP API và ngrok ở hai cửa sổ PowerShell:
+
+```powershell
+php -S 127.0.0.1:8080 -t backend backend/router.php
+```
+
+```powershell
+ngrok http 8080 --url https://<domain-ngrok-cua-ban>
+```
+
+Kiểm tra `http://127.0.0.1:8080/food-delivery-api/api/` trả `database: connected`, rồi Sync Gradle và cài lại `localDebug`. Nếu dùng `alwaysdataDebug`, app gọi URL Alwaysdata và không cần mở PHP/ngrok local; cấu hình Firebase của backend Alwaysdata phải khớp Firebase project đang dùng.
+
 Compile target Java 11 không có nghĩa nên chạy Gradle 9 bằng JDK 11. Ví dụ dùng JBR đi kèm Android Studio trong cửa sổ PowerShell:
 
 ```powershell

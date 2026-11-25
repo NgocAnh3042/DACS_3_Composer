@@ -1,0 +1,3 @@
+# Copy this file to backend.local.properties and replace the URL after starting ngrok.
+# The local PHP built-in server uses backend/ as its document root, so the API path is /api/.
+apiBaseUrl=https://replace-with-your-ngrok-domain.ngrok-free.app/food-delivery-api/api/

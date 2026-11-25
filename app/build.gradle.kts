@@ -1,8 +1,21 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
 }
+
+val backendLocalProperties = Properties().apply {
+    val propertiesFile = rootProject.file("backend.local.properties")
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use { load(it) }
+    }
+}
+val localApiBaseUrl = backendLocalProperties.getProperty(
+    "apiBaseUrl",
+    "https://replace-with-your-ngrok-domain.ngrok-free.app/food-delivery-api/api/"
+).trim().let { if (it.endsWith("/")) it else "$it/" }
 
 android {
     namespace = "com.example.dacs_3_composer"
@@ -16,6 +29,22 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    flavorDimensions += "backend"
+    productFlavors {
+        create("alwaysdata") {
+            dimension = "backend"
+            buildConfigField(
+                "String",
+                "FOODHUB_API_BASE_URL",
+                "\"https://chinh.alwaysdata.net/food-delivery-api/api/\""
+            )
+        }
+        create("local") {
+            dimension = "backend"
+            buildConfigField("String", "FOODHUB_API_BASE_URL", "\"$localApiBaseUrl\"")
+        }
     }
 
     packaging {

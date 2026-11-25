@@ -1,6 +1,17 @@
 # Bàn giao phiên làm việc — FoodHub
 
-Cập nhật **20/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+Cập nhật **25/11/2026**, múi giờ làm việc Asia/Bangkok. Đọc trước khi tiếp tục dự án.
+
+## Đồng bộ hồ sơ Firebase và ngrok local — 25/11/2026
+
+- Theo yêu cầu chuyển về AnChinGo: `app/google-services.json` dùng project `dacs3-anchin-go` (948126651845); `backend/config.local.php` trên máy cũng xác minh token từ `dacs3-anchin-go`, vẫn dùng TiDB `food_delivery_app`. Cấu hình private này bị Git bỏ qua.
+- Đã thay `app/google-services.json` bằng `Downloads/google-services (2).json`. File xác nhận project `dacs3-anchin-go`, package đúng và có Android OAuth fingerprints cả `b3...` lẫn `aa...`; cấu hình backend local cũng là `dacs3-anchin-go`.
+- Alwaysdata chưa được cấu hình/xác minh chuyển sang AnChinGo. Đổi app JSON hoặc config local không tự cập nhật server hosting.
+- Backend local nối UID Firebase mới với hồ sơ TiDB cũ khi email trong token đã được Firebase xác minh và trùng email hồ sơ. Mỗi hàng người dùng vẫn giữ ID, quyền và quan hệ nghiệp vụ.
+- `localDebug` dùng URL trong `backend.local.properties`; `alwaysdataDebug` vẫn gọi Alwaysdata.
+- Local URL cần path `/food-delivery-api/api/` để API parser nhận đúng route. Đã thêm lại `backend/router.php` vì PHP built-in server không đọc `.htaccess`.
+- Kiểm tra localhost `/food-delivery-api/api/` trả HTTP 200 và `database=connected` trên TiDB Cloud. Chưa thử đăng nhập Google hoặc đồng bộ hồ sơ thật.
+- Tunnel chưa online trong môi trường công cụ: ngrok báo không kết nối được `connect.ngrok-agent.com:443` vì kết nối proxy `127.0.0.1:9` bị từ chối; local ngrok API không có tunnel. Cần khởi động ngrok trong PowerShell có kết nối Internet.
 
 ## Voucher theo mẫu HTML
 

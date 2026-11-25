@@ -23,6 +23,7 @@ sequenceDiagram
 
 - Email/password và Google đều được Firebase xác thực. Không lưu mật khẩu vào `users`.
 - Google dùng Credential Manager → Google ID token → Firebase credential. ID token gọi API là **Firebase ID token**, không phải Google ID token ban đầu.
+- Nếu đổi Firebase project, UID mới chưa có trong TiDB. Backend local có thể nối UID mới với hồ sơ cũ khi token chứa email đã được Firebase xác minh và email trùng khớp; việc này giữ nguyên ID, quyền và dữ liệu đơn hàng. Email chưa xác minh không được dùng để nhận hồ sơ cũ.
 - Việc Firebase còn tài khoản nhưng MySQL chưa có hồ sơ là tình huống hợp lệ sau chuyển database. Không đăng ký lại cùng email để giải quyết; dùng đăng nhập và đồng bộ `users/me`.
 - Đăng ký thông thường chỉ tạo khách hàng/nhà hàng/shipper. Admin được cấp từ môi trường quản trị, không thêm lựa chọn admin vào form đăng ký.
 - Tài khoản thử `admin@gmail.com` đã được cập nhật trong Firebase, gán `role=admin`, `status=active` trong MySQL và kiểm tra đăng nhập/API ngày 12/11/2026.

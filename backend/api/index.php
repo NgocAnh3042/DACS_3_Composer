@@ -181,6 +181,19 @@ try {
             $in=body();$exists=$pdo->prepare('SELECT id FROM users WHERE firebase_uid=?');$exists->execute([$uid]);$old=$exists->fetch();
             $fullName=trim((string)($in['fullName']??$in['name']??''));
             $email=trim((string)($claims['email']??$in['email']??''));$phone=trim((string)($in['phoneNumber']??$in['phone']??''));
+            $verifiedEmail=trim((string)($claims['email']??''));
+            if(!$old && $verifiedEmail!=='' && ($claims['email_verified']??false)===true) {
+                // A Firebase project change can issue a new UID for the same verified Google email.
+                // Reattach that identity to the existing MySQL row instead of creating a duplicate profile.
+                $legacy=$pdo->prepare('SELECT id FROM users WHERE email=? AND deleted_at IS NULL LIMIT 1');
+                $legacy->execute([$verifiedEmail]);
+                $legacyId=$legacy->fetchColumn();
+                if($legacyId!==false) {
+                    $relink=$pdo->prepare('UPDATE users SET firebase_uid=? WHERE id=? AND deleted_at IS NULL');
+                    $relink->execute([$uid,$legacyId]);
+                    $exists->execute([$uid]);$old=$exists->fetch();
+                }
+            }
             if(!$old) {
                 $requested=strtolower(trim((string)($in['role']??'customer')));
                 $role=match($requested){'restaurant','seller','nhà hàng'=>'seller','shipper','driver'=>'driver',default=>'customer'};

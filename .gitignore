@@ -14,3 +14,5 @@
 .cxx
 local.properties
 /secrets.properties
+/backend.local.properties
+/backend/config.local.php

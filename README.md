@@ -4,6 +4,8 @@ FoodHub là dự án Android đang phát triển, gồm bốn vai trò: khách h
 
 Dữ liệu nghiệp vụ đi qua **API PHP trên Alwaysdata** để lưu trong database **`food_delivery_app` trên TiDB Cloud** qua kết nối MySQL có TLS. Firebase Authentication xử lý danh tính đăng nhập; Firebase Cloud Messaging gửi thông báo; Realtime Database giữ dữ liệu phiên và tọa độ trực tiếp; Cloudinary lưu ảnh.
 
+Trong Android Studio, chọn `localDebug` để gọi API PHP local qua ngrok hoặc `alwaysdataDebug` để gọi API Alwaysdata. Cả hai môi trường dùng TiDB Cloud; chọn build variant chỉ đổi URL backend.
+
 > Ngày **14/11/2026**, database chuyển sang TiDB Cloud (32 bảng, 27 cột ID tự tăng) và API đã online trên **Alwaysdata**. Mã Android đã đổi URL; app cũ trên điện thoại cần build/cài bản mới. Các database cũ vẫn giữ để đối chiếu.
 
 ## Đọc tài liệu
