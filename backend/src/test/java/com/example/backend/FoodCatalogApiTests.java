@@ -135,6 +135,31 @@ class FoodCatalogApiTests {
     }
 
     @Test
+    void registrationAcceptsRoleAliasesAndRejectsUnknownRoles() throws Exception {
+        assertRegistrationRole("firebase-role-restaurant", "restaurant", "seller");
+        assertRegistrationRole("firebase-role-shipper", "shipper", "driver");
+        assertRegistrationRole("firebase-role-user", "user", "customer");
+        firebaseUid = "firebase-role-invalid";
+        when(tokenVerifier.verify(TOKEN)).thenReturn(new FirebaseTokenVerifier.FirebaseClaims(
+                firebaseUid, Map.of("email", "invalid-role@example.test", "email_verified", true)));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/users/me")
+                        .header("Authorization", "Bearer " + TOKEN).contentType("application/json")
+                        .content("{\"name\":\"Invalid\",\"role\":\"root\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    private void assertRegistrationRole(String uid, String requestedRole, String expectedRole) throws Exception {
+        firebaseUid = uid;
+        when(tokenVerifier.verify(TOKEN)).thenReturn(new FirebaseTokenVerifier.FirebaseClaims(
+                uid, Map.of("email", uid + "@example.test", "email_verified", true)));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/users/me")
+                        .header("Authorization", "Bearer " + TOKEN).contentType("application/json")
+                        .content("{\"name\":\"Role Test\",\"role\":\"" + requestedRole + "\"}"))
+                .andExpect(status().isOk());
+        assertEquals(expectedRole, jdbc.queryForObject("SELECT role FROM users WHERE firebase_uid=?", String.class, uid));
+    }
+
+    @Test
     void categoriesJsonMatchesFixtureAndSupportsStoreFilter() throws Exception {
         assertFixture("fixtures/categories.json", get("/api/categories?restaurantId=10&limit=100&offset=0"));
     }
